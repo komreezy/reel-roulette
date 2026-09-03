@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getLibraries, getMovies, getResources } from "./plex";
+import { getLibraries, getMovies, getResources, resolveServer } from "./plex";
 
 afterEach(() => vi.restoreAllMocks());
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json" } });
@@ -17,6 +17,15 @@ describe("Plex adapter contracts", () => {
   it("never substitutes the account token for a missing resource token", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(json({ MediaContainer: { Device: [{ clientIdentifier: "machine-1", name: "Unsafe", product: "Plex Media Server", Connection: [{ uri: "https://server.plex.direct:32400", relay: false }] }] } }));
     expect(await getResources("account-token", "client-1")).toEqual([]);
+  });
+  it("falls back from an unreachable direct connection to Plex Relay", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async input => {
+      const url = String(input);
+      if (url.startsWith("https://clients.plex.tv/api/v2/resources")) return json([{ clientIdentifier: "machine-1", name: "Home", product: "Plex Media Server", accessToken: "server-token", connections: [{ uri: "https://direct.plex.direct:32400", local: false, relay: false }, { uri: "https://relay.plex.tv:443/machine-1", local: false, relay: true }] }]);
+      if (url.startsWith("https://direct.plex.direct")) throw new Error("unreachable");
+      return json({ MediaContainer: {} });
+    });
+    await expect(resolveServer("account-token", "client-1", "machine-1")).resolves.toMatchObject({ uri: "https://relay.plex.tv:443/machine-1" });
   });
   it("falls back to sections/all only for a 404 and paginates until total", async () => {
     const fetcher = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => { const url = String(input); if (url.endsWith("/library/sections")) return json({}, 404); if (url.endsWith("/library/sections/all")) return json({ MediaContainer: { Directory: [{ key: 7, type: "movie", title: "Films" }] } }); const start = new URL(url).searchParams; return json({ MediaContainer: { offset: Number(start.get("x") ?? 0), totalSize: 2, Video: [{ ratingKey: String(start.get("page") ?? "1"), title: "Film", year: "2024", duration: 600000 }] } }); });

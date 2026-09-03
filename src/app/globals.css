@@ -26,6 +26,7 @@ h1 em { color: var(--amber); font-style: italic; }
 .line-label { color: var(--amber); font: 10px var(--mono); letter-spacing: .12em; text-transform: uppercase; }
 .connection-note p { margin: 10px 0 0; }
 .library-controls { display: grid; grid-template-columns: 1fr 1fr auto; gap: 6px; margin-top: 14px; }
+.connection-note .connection-feedback { color: var(--amber); font: 10px/1.45 var(--mono); letter-spacing: .02em; }
 select { background: var(--surface); border: 1px solid var(--rule); color: var(--ivory); padding: 9px 8px; font-size: 11px; border-radius: 0; min-width: 0; }
 .small-button { background: var(--amber); border: 0; color: var(--graphite); padding: 0 11px; font-size: 11px; cursor: pointer; }
 .stage { position: relative; padding: 24px 8vw 44px; min-height: 590px; }
