@@ -1,36 +1,30 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Reel Roulette
 
-## Getting Started
+One fair turn through a Plex movie library. Reel Roulette connects through Plex PIN authentication, lets you narrow the eligible shelf, and chooses one film without recommendations or a database.
 
-First, run the development server:
+Reel Roulette is an independent open-source project and is not affiliated with or endorsed by Plex, Inc. Plex is a trademark of Plex, Inc.
+
+## Local setup
 
 ```bash
+npm install
+cp .env.example .env.local
+# set SESSION_SECRET to 32+ random characters
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Unauthenticated visitors get a clearly labeled secondary demo shelf. Connect Plex to start the current JWT PIN flow: a per-session Ed25519 keypair, key ID, and random client identifier are generated server-side; the pending PIN and private key are encrypted in an HttpOnly cookie. The browser receives only Plex’s authorization URL and polls the server. A hosted Vercel deployment accepts only non-local HTTPS connections on Plex-managed `plex.direct` or `plex.services` hosts; LAN-only or custom-host connections are reported as unreachable honestly.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Deploy to Vercel
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Import this repository into Vercel, set `SESSION_SECRET` to a strong random value and `APP_ORIGIN` to the deployment’s canonical HTTPS origin in Project Settings → Environment Variables, and deploy. No database or other integration is required. Self-hosting uses the same environment variables and `npm run build && npm start`.
 
-## Learn More
+## Privacy
 
-To learn more about Next.js, take a look at the following resources:
+The Plex JWT and client ID are sealed with AES-GCM in an HttpOnly cookie and expire after eight hours. Per-server resource tokens are re-discovered server-side when needed; none of these credentials are written to localStorage or exposed to client JavaScript. Plex metadata exists only in the request/client session and is not persisted by the app. Images are proxied only for validated metadata artwork paths from a re-discovered Plex resource. JWT nonce refresh is out of scope; users reconnect after the app session expires.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Commands
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+`npm test` runs domain and security tests. `npm run test:e2e` starts or reuses the local app and runs desktop and mobile browser flows. `npm run lint`, `npm run typecheck`, and `npm run build` are the release checks.
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+See [SECURITY.md](SECURITY.md), [CONTRIBUTING.md](CONTRIBUTING.md), and [LICENSE](LICENSE).

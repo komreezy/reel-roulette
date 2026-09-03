@@ -1,0 +1,4 @@
+import { NextResponse } from "next/server";
+import { getMovies, PlexError, resolveServer } from "@/lib/plex";
+import { getSession } from "@/lib/request";
+export async function GET(request: Request) { const session = await getSession(); const params = new URL(request.url).searchParams; const id = params.get("server"); const library = params.get("library"); if (!session) return NextResponse.json({ error: "Connect Plex to continue." }, { status: 401 }); if (!id || !library) return NextResponse.json({ error: "Choose a Plex server and movie library." }, { status: 400 }); try { const connection = await resolveServer(session.token, session.clientId, id); return NextResponse.json({ movies: await getMovies(connection, library, session.clientId) }); } catch (error) { return NextResponse.json({ error: (error as PlexError).message }, { status: 502 }); } }
