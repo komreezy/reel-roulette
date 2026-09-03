@@ -4,6 +4,12 @@ import { getLibraries, getMovies, getResources } from "./plex";
 afterEach(() => vi.restoreAllMocks());
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json" } });
 describe("Plex adapter contracts", () => {
+  it("parses the top-level array returned by the Plex resources API", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(json([{ clientIdentifier: "machine-1", name: "Home", product: "Plex Media Server", accessToken: "server-token", connections: [{ uri: "https://server.plex.direct:32400", local: false, relay: false }] }]));
+    const resources = await getResources("account-token", "client-1");
+    expect(resources).toHaveLength(1);
+    expect(resources[0]).toMatchObject({ id: "machine-1", name: "Home", accessToken: "server-token" });
+  });
   it("uses the resource token and keeps only remotely reachable server data", async () => {
     const fetcher = vi.spyOn(globalThis, "fetch").mockResolvedValue(json({ MediaContainer: { Device: [{ clientIdentifier: "machine-1", name: "Shared", product: "Plex Media Server", accessToken: "server-token", Connection: [{ uri: "https://relay", relay: true }] }] } }));
     const resources = await getResources("account-token", "client-1"); expect(resources[0].accessToken).toBe("server-token"); expect(fetcher.mock.calls[0][0]).toContain("includeIPv6=1");

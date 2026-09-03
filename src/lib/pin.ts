@@ -22,7 +22,7 @@ export async function createPendingPin(requestOrigin: string): Promise<{ pending
   const parsedOrigin = new URL(candidate);
   if (process.env.NODE_ENV === "production" && parsedOrigin.protocol !== "https:") throw new Error("APP_ORIGIN must be an allowlisted HTTPS origin.");
   if (parsedOrigin.username || parsedOrigin.password) throw new Error("APP_ORIGIN must not contain credentials.");
-  const forwardUrl = `${parsedOrigin.origin}/api/plex/auth/status`;
+  const forwardUrl = `${parsedOrigin.origin}/api/plex/auth/status?complete=1`;
   const authUrl = `https://app.plex.tv/auth#?clientID=${encodeURIComponent(clientId)}&code=${encodeURIComponent(body.code)}&context%5Bdevice%5D%5Bproduct%5D=${encodeURIComponent(PLEX_PRODUCT)}&forwardUrl=${encodeURIComponent(forwardUrl)}`;
   return { pending, authUrl };
 }

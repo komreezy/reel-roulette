@@ -8,6 +8,7 @@ const str = (v: unknown) => typeof v === "string" && v ? v : undefined;
 const num = (v: unknown) => { const n = Number(v); return Number.isFinite(n) ? n : undefined; };
 export function parseXmlAttributes(xml: string, tag: string) { return [...xml.matchAll(new RegExp(`<${tag}\\b([^>]*)>`, "gi"))].map(m => Object.fromEntries([...m[1].matchAll(/([\w-]+)\s*=\s*"([^"]*)"/g)].map(a => [a[1], a[2]]))); }
 export function parsePayload(payload: unknown, tag: string): Record<string, unknown>[] {
+  if (Array.isArray(payload)) return payload.filter((value): value is Record<string, unknown> => Boolean(value && typeof value === "object"));
   if (typeof payload === "string") return parseXmlAttributes(payload, tag);
   if (!payload || typeof payload !== "object") return [];
   const root = payload as Record<string, unknown>; const container = (root.MediaContainer ?? root) as Record<string, unknown>;

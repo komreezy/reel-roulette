@@ -22,6 +22,7 @@ describe("Plex JWT PIN contract", () => {
     expect(body.jwk.x).toEqual(expect.any(String));
     expect(pending.privateKey).toContain("BEGIN PRIVATE KEY");
     expect(authUrl).toContain("https://app.plex.tv/auth#?");
+    expect(decodeURIComponent(authUrl)).toContain("/api/plex/auth/status?complete=1");
     expect(authUrl).not.toContain(pending.privateKey);
 
     const jwt = await deviceJwt(pending);
