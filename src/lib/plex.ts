@@ -4,7 +4,7 @@ import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 export const TIMEOUT_MS = 7000;
 const MAX_BODY = 4 * 1024 * 1024;
-export class PlexError extends Error { constructor(public code: "unauthorized" | "unreachable" | "upstream" | "invalid", message: string) { super(message); } }
+export class PlexError extends Error { constructor(public code: "unauthorized" | "unreachable" | "upstream" | "invalid", message: string, public diagnostics?: Record<string, unknown>) { super(message); } }
 type Resource = PlexServer & { accessToken: string; rawConnections: { uri: string; local?: unknown; relay?: unknown }[] };
 type ResolvedConnection = { uri: string; token: string; machineIdentifier: string; credentialKind?: "resource" | "jwt"; connectionKind?: "direct" | "relay"; hostKind?: "plex.direct" | "plex.services" | "relay.plex.tv" };
 const str = (v: unknown) => typeof v === "string" && v ? v : undefined;
@@ -70,7 +70,8 @@ async function destinationClasses(uri: string) { try { const records = await Pro
 export async function resolveServer(token: string, clientId: string, id: string) {
   const server = (await getResources(token, clientId)).find(s => s.id === id); if (!server) throw new PlexError("unreachable", "This Plex server is no longer available.");
   const connections = orderedConnections(server);
-  diagnostic({ stage: "topology", directCount: connections.filter(c => c.relay !== true && c.relay !== "1").length, relayCount: connections.filter(c => c.relay === true || c.relay === "1").length, credentialCount: new Set([server.accessToken, token]).size, destinationClasses: await Promise.all(connections.map(connection => destinationClasses(connection.uri))) });
+  const destinations = await Promise.all(connections.map(connection => destinationClasses(connection.uri)));
+  diagnostic({ stage: "topology", directCount: connections.filter(c => c.relay !== true && c.relay !== "1").length, relayCount: connections.filter(c => c.relay === true || c.relay === "1").length, credentialCount: new Set([server.accessToken, token]).size, destinationClasses: destinations });
   const attempts: Record<string, unknown>[] = [];
   for (const credential of [...new Set([server.accessToken, token])]) {
     for (const connection of connections) {
@@ -81,7 +82,7 @@ export async function resolveServer(token: string, clientId: string, id: string)
     }
   }
   diagnostic({ stage: "resolution-summary", attempts });
-  throw new PlexError("unreachable", "This server could not be reached through secure Remote Access or Plex Relay.");
+  throw new PlexError("unreachable", "This server could not be reached through secure Remote Access or Plex Relay.", { destinationClasses: destinations, attempts });
 }
 export function validateArtworkPath(path: string) { if (!path || path.length > 500 || !path.startsWith("/") || path.startsWith("//") || /%2f|%2e|\\/i.test(path) || path.split("/").some(p => p === "." || p === "..") || !/^\/library\/metadata\/\d+\/(thumb|art)(?:\/[^/?#]*)?$/.test(path)) return false; return true; }
 export async function getLibraries(connection: { uri: string; token: string; credentialKind?: string; connectionKind?: string; hostKind?: string }, clientId: string) { const context = { stage: "libraries", credential: connection.credentialKind ?? "test", connection: connection.connectionKind ?? "test", host: connection.hostKind ?? "test" }; const started = Date.now(); try { let response = await fetchWithTimeout(`${connection.uri}/library/sections`, connection.token, clientId); if (response.status === 404) response = await fetchWithTimeout(`${connection.uri}/library/sections/all`, connection.token, clientId); diagnostic({ ...context, outcome: "http", status: response.status, elapsedMs: Date.now() - started }); if (!response.ok) throw new PlexError("upstream", "Plex libraries could not be loaded."); const libraries = parsePayload(await read(response), "Directory").filter(i => i.type === "movie").map(i => ({ key: String(i.key), title: str(i.title) ?? "Movies", type: "movie" as const })); diagnostic({ ...context, outcome: "parsed", movieLibraryCount: libraries.length, elapsedMs: Date.now() - started }); return libraries; } catch (error) { diagnostic({ ...context, outcome: "error", error: error instanceof PlexError ? error.code : "unknown", elapsedMs: Date.now() - started }); throw error; } }

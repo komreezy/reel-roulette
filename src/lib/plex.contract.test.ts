@@ -58,7 +58,7 @@ describe("Plex adapter contracts", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async input => String(input).startsWith("https://clients.plex.tv/api/v2/resources")
       ? json([{ clientIdentifier: "machine-1", name: "Home", product: "Plex Media Server", accessToken: "same-token", connections: [1, 2, 3].map(index => ({ uri: `https://route-${index}.plex.direct:32400`, local: false, relay: false })) }])
       : json({}, 503));
-    await expect(resolveServer("same-token", "client-1", "machine-1")).rejects.toThrow("secure Remote Access");
+    await expect(resolveServer("same-token", "client-1", "machine-1")).rejects.toMatchObject({ diagnostics: { attempts: expect.arrayContaining([expect.objectContaining({ connection: "direct", outcome: "http", status: 503 })]) } });
     const summaries = log.mock.calls.map(call => call.join(" ")).filter(line => line.includes('"stage":"resolution-summary"'));
     expect(summaries).toHaveLength(1);
     expect(JSON.parse(summaries[0].split("[reel-plex-diag] ")[1]).attempts).toHaveLength(3);
