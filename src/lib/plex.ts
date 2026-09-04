@@ -38,7 +38,7 @@ async function read(response: Response): Promise<unknown> {
 }
 async function fetchWithTimeout(url: string, token: string, clientId: string, init: RequestInit = {}) {
   const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  try { const response = await fetch(url, { ...init, redirect: "error", cache: "no-store", signal: controller.signal, headers: { Accept: "application/json, application/xml", "X-Plex-Token": token, "X-Plex-Client-Identifier": clientId, "X-Plex-Product": PLEX_PRODUCT, ...(init.headers ?? {}) } }); if (response.status === 401 || response.status === 403) throw new PlexError("unauthorized", "Plex authorization expired."); return response; } catch (e) { if (e instanceof PlexError) throw e; throw new PlexError("unreachable", "This Plex server could not be reached. Hosted apps need secure Remote Access or Relay."); } finally { clearTimeout(timeout); }
+  try { const response = await fetch(url, { ...init, redirect: "manual", cache: "no-store", signal: controller.signal, headers: { Accept: "application/json, application/xml", "X-Plex-Token": token, "X-Plex-Client-Identifier": clientId, "X-Plex-Product": PLEX_PRODUCT, ...(init.headers ?? {}) } }); if (response.status === 401 || response.status === 403) throw new PlexError("unauthorized", "Plex authorization expired."); return response; } catch (e) { if (e instanceof PlexError) throw e; throw new PlexError("unreachable", "This Plex server could not be reached. Hosted apps need secure Remote Access or Relay."); } finally { clearTimeout(timeout); }
 }
 export async function getResources(token: string, clientId: string): Promise<Resource[]> {
   const response = await fetchWithTimeout(`${PLEX_CLIENTS_URL}/api/v2/resources?includeHttps=1&includeRelay=1&includeIPv6=1`, token, clientId); if (!response.ok) throw new PlexError("upstream", "Plex resources could not be loaded.");
@@ -57,6 +57,7 @@ function diagnostic(event: Record<string, unknown>) { console.info("[reel-plex-d
 export async function resolveServer(token: string, clientId: string, id: string) {
   const server = (await getResources(token, clientId)).find(s => s.id === id); if (!server) throw new PlexError("unreachable", "This Plex server is no longer available.");
   const connections = orderedConnections(server);
+  diagnostic({ stage: "topology", directCount: connections.filter(c => c.relay !== true && c.relay !== "1").length, relayCount: connections.filter(c => c.relay === true || c.relay === "1").length, credentialCount: new Set([server.accessToken, token]).size });
   for (const credential of [...new Set([server.accessToken, token])]) {
     for (const connection of connections) {
       const uri = connection.uri.replace(/\/$/, "");
