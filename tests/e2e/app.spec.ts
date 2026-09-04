@@ -49,11 +49,15 @@ test("privacy page is reachable", async ({ page }) => {
   await expect(page.getByRole("heading", { name: /privacy/i })).toBeVisible();
 });
 
-test("shows Plex connection errors beside the library controls", async ({ page }) => {
+test("shows Plex connection progress and errors beside the library controls", async ({ page }) => {
   await page.route("**/api/plex/auth/status", route => route.fulfill({ json: { authenticated: true } }));
   await page.route("**/api/plex/servers", route => route.fulfill({ json: { servers: [{ id: "server-1", machineIdentifier: "server-1", name: "JUANDEI", product: "Plex Media Server", connections: [] }] } }));
-  await page.route("**/api/plex/libraries?**", route => route.fulfill({ status: 502, contentType: "application/json", body: JSON.stringify({ error: "Remote access unavailable." }) }));
+  let finishRequest!: () => void;
+  const requestMayFinish = new Promise<void>(resolve => { finishRequest = resolve; });
+  await page.route("**/api/plex/libraries?**", async route => { await requestMayFinish; await route.fulfill({ status: 502, contentType: "application/json", body: JSON.stringify({ error: "Remote access unavailable." }) }); });
   await page.goto("/");
   await page.getByLabel("Plex server").selectOption("server-1");
+  await expect(page.locator(".connection-note")).toContainText("Checking secure Plex routes");
+  finishRequest();
   await expect(page.locator(".connection-note")).toContainText("Remote access unavailable.");
 });
