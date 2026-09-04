@@ -22,7 +22,7 @@ describe("Plex adapter contracts", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async input => {
       const url = String(input);
       if (url.startsWith("https://clients.plex.tv/api/v2/resources")) return json([{ clientIdentifier: "machine-1", name: "Home", product: "Plex Media Server", accessToken: "server-token", connections: [{ uri: "https://direct.plex.direct:32400", local: false, relay: false }, { uri: "https://relay.plex.tv:443/machine-1", local: false, relay: true }] }]);
-      if (url.startsWith("https://direct.plex.direct")) throw new Error("unreachable");
+      if (url.startsWith("https://direct.plex.direct")) return json({}, 401);
       return json({ MediaContainer: {} });
     });
     await expect(resolveServer("account-token", "client-1", "machine-1")).resolves.toMatchObject({ uri: "https://relay.plex.tv:443/machine-1" });

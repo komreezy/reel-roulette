@@ -56,7 +56,7 @@ export async function resolveServer(token: string, clientId: string, id: string)
   for (const connection of orderedConnections(server)) {
     const uri = connection.uri.replace(/\/$/, "");
     try { const probe = await fetchWithTimeout(`${uri}/identity`, server.accessToken, clientId); if (probe.ok) return { uri, token: server.accessToken, machineIdentifier: server.machineIdentifier }; }
-    catch (error) { if (error instanceof PlexError && error.code === "unauthorized") throw error; }
+    catch { continue; }
   }
   throw new PlexError("unreachable", "This server could not be reached through secure Remote Access or Plex Relay.");
 }
