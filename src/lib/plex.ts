@@ -1,5 +1,7 @@
 import type { Movie, PlexServer } from "./models";
 import { PLEX_CLIENTS_URL, PLEX_PRODUCT } from "./pin";
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
 export const TIMEOUT_MS = 7000;
 const MAX_BODY = 4 * 1024 * 1024;
 export class PlexError extends Error { constructor(public code: "unauthorized" | "unreachable" | "upstream" | "invalid", message: string) { super(message); } }
@@ -59,10 +61,16 @@ export function orderedConnections(server: Pick<Resource, "rawConnections">) { r
 export function chooseConnection(server: Pick<Resource, "rawConnections">) { return orderedConnections(server)[0] ?? null; }
 function hostKind(uri: string): ResolvedConnection["hostKind"] { const host = new URL(uri).hostname.toLowerCase(); return host.endsWith(".plex.direct") ? "plex.direct" : host.endsWith(".plex.services") ? "plex.services" : "relay.plex.tv"; }
 function diagnostic(event: Record<string, unknown>) { console.info("[reel-plex-diag]", JSON.stringify(event)); }
+export function classifyAddress(address: string) {
+  if (isIP(address) === 4) { const [a, b] = address.split(".").map(Number); const nonpublic = a === 0 || a === 10 || a === 127 || a >= 224 || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168); return nonpublic ? "ipv4-nonpublic" : "ipv4-public"; }
+  if (isIP(address) === 6) { const value = address.toLowerCase(); return value === "::" || value === "::1" || value.startsWith("fc") || value.startsWith("fd") || /^fe[89ab]/.test(value) ? "ipv6-nonpublic" : "ipv6-public"; }
+  return "unknown";
+}
+async function destinationClasses(uri: string) { try { const records = await Promise.race([lookup(new URL(uri).hostname, { all: true }), new Promise<never>((_, reject) => setTimeout(() => reject(new Error("dns-timeout")), 1000))]); return [...new Set(records.map(record => classifyAddress(record.address)))]; } catch { return ["dns-error"]; } }
 export async function resolveServer(token: string, clientId: string, id: string) {
   const server = (await getResources(token, clientId)).find(s => s.id === id); if (!server) throw new PlexError("unreachable", "This Plex server is no longer available.");
   const connections = orderedConnections(server);
-  diagnostic({ stage: "topology", directCount: connections.filter(c => c.relay !== true && c.relay !== "1").length, relayCount: connections.filter(c => c.relay === true || c.relay === "1").length, credentialCount: new Set([server.accessToken, token]).size });
+  diagnostic({ stage: "topology", directCount: connections.filter(c => c.relay !== true && c.relay !== "1").length, relayCount: connections.filter(c => c.relay === true || c.relay === "1").length, credentialCount: new Set([server.accessToken, token]).size, destinationClasses: await Promise.all(connections.map(connection => destinationClasses(connection.uri))) });
   const attempts: Record<string, unknown>[] = [];
   for (const credential of [...new Set([server.accessToken, token])]) {
     for (const connection of connections) {
