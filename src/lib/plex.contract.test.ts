@@ -49,6 +49,16 @@ describe("Plex adapter contracts", () => {
     const connection = await resolveServer("account-token", "client-1", "machine-1");
     await expect(getLibraries(connection, "client-1")).resolves.toEqual([{ key: "7", title: "Movies", type: "movie" }]);
   });
+  it("emits one aggregate summary for every failed Plex route", async () => {
+    const log = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    vi.spyOn(globalThis, "fetch").mockImplementation(async input => String(input).startsWith("https://clients.plex.tv/api/v2/resources")
+      ? json([{ clientIdentifier: "machine-1", name: "Home", product: "Plex Media Server", accessToken: "same-token", connections: [1, 2, 3].map(index => ({ uri: `https://route-${index}.plex.direct:32400`, local: false, relay: false })) }])
+      : json({}, 503));
+    await expect(resolveServer("same-token", "client-1", "machine-1")).rejects.toThrow("secure Remote Access");
+    const summaries = log.mock.calls.map(call => call.join(" ")).filter(line => line.includes('"stage":"resolution-summary"'));
+    expect(summaries).toHaveLength(1);
+    expect(JSON.parse(summaries[0].split("[reel-plex-diag] ")[1]).attempts).toHaveLength(3);
+  });
   it("falls back to sections/all only for a 404 and paginates until total", async () => {
     const fetcher = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => { const url = String(input); if (url.endsWith("/library/sections")) return json({}, 404); if (url.endsWith("/library/sections/all")) return json({ MediaContainer: { Directory: [{ key: 7, type: "movie", title: "Films" }] } }); const start = new URL(url).searchParams; return json({ MediaContainer: { offset: Number(start.get("x") ?? 0), totalSize: 2, Video: [{ ratingKey: String(start.get("page") ?? "1"), title: "Film", year: "2024", duration: 600000 }] } }); });
     const connection = { uri: "https://server", token: "server-token" }; expect((await getLibraries(connection, "client-1"))[0].key).toBe("7");

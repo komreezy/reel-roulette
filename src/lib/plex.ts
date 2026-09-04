@@ -58,14 +58,16 @@ export async function resolveServer(token: string, clientId: string, id: string)
   const server = (await getResources(token, clientId)).find(s => s.id === id); if (!server) throw new PlexError("unreachable", "This Plex server is no longer available.");
   const connections = orderedConnections(server);
   diagnostic({ stage: "topology", directCount: connections.filter(c => c.relay !== true && c.relay !== "1").length, relayCount: connections.filter(c => c.relay === true || c.relay === "1").length, credentialCount: new Set([server.accessToken, token]).size });
+  const attempts: Record<string, unknown>[] = [];
   for (const credential of [...new Set([server.accessToken, token])]) {
     for (const connection of connections) {
       const uri = connection.uri.replace(/\/$/, "");
       const context = { stage: "sections-probe", credential: credential === server.accessToken ? "resource" : "jwt", connection: connection.relay === true || connection.relay === "1" ? "relay" : "direct", host: hostKind(uri) }; const started = Date.now();
-      try { let probe = await fetchWithTimeout(`${uri}/library/sections`, credential, clientId); if (probe.status === 404) probe = await fetchWithTimeout(`${uri}/library/sections/all`, credential, clientId); diagnostic({ ...context, outcome: "http", status: probe.status, elapsedMs: Date.now() - started }); if (probe.ok) return { uri, token: credential, machineIdentifier: server.machineIdentifier, credentialKind: context.credential, connectionKind: context.connection, hostKind: context.host } as ResolvedConnection; }
-      catch (error) { diagnostic({ ...context, outcome: "error", error: error instanceof PlexError ? error.code : "unknown", elapsedMs: Date.now() - started }); continue; }
+      try { let probe = await fetchWithTimeout(`${uri}/library/sections`, credential, clientId); if (probe.status === 404) probe = await fetchWithTimeout(`${uri}/library/sections/all`, credential, clientId); const attempt = { ...context, outcome: "http", status: probe.status, elapsedMs: Date.now() - started }; attempts.push(attempt); diagnostic(attempt); if (probe.ok) { diagnostic({ stage: "resolution-summary", attempts }); return { uri, token: credential, machineIdentifier: server.machineIdentifier, credentialKind: context.credential, connectionKind: context.connection, hostKind: context.host } as ResolvedConnection; } }
+      catch (error) { const attempt = { ...context, outcome: "error", error: error instanceof PlexError ? error.code : "unknown", elapsedMs: Date.now() - started }; attempts.push(attempt); diagnostic(attempt); continue; }
     }
   }
+  diagnostic({ stage: "resolution-summary", attempts });
   throw new PlexError("unreachable", "This server could not be reached through secure Remote Access or Plex Relay.");
 }
 export function validateArtworkPath(path: string) { if (!path || path.length > 500 || !path.startsWith("/") || path.startsWith("//") || /%2f|%2e|\\/i.test(path) || path.split("/").some(p => p === "." || p === "..") || !/^\/library\/metadata\/\d+\/(thumb|art)(?:\/[^/?#]*)?$/.test(path)) return false; return true; }
