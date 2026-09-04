@@ -4,7 +4,7 @@ import { chooseConnection, isApprovedConnectionUri, parsePayload, readLimitedByt
 
 beforeEach(() => { process.env.SESSION_SECRET = "test secret that is long enough for aes gcm"; });
 describe("sealed auth state", () => {
-  it("round trips and rejects tampering", async () => { const value = await seal({ token: "secret", clientId: "client", expiresAt: Date.now() + 1000 }); expect(unsealSession(value)?.token).toBe("secret"); const altered = `${value.slice(0, -1)}${value.endsWith("a") ? "b" : "a"}`; expect(unseal(altered)).toBeNull(); });
+  it("round trips and rejects tampering", async () => { const value = await seal({ token: "secret", clientId: "client", expiresAt: Date.now() + 1000 }); expect(unsealSession(value)?.token).toBe("secret"); const parts = value.split("."); const ciphertext = Buffer.from(parts[1], "base64url"); ciphertext[0] ^= 1; parts[1] = ciphertext.toString("base64url"); expect(unseal(parts.join("."))).toBeNull(); });
   it("rejects expired sessions and pending state", async () => { const value = await seal({ token: "secret", clientId: "client", expiresAt: Date.now() - 1 }); expect(unsealSession(value)).toBeNull(); const pending = await seal({ id: 1, privateKey: "key", expiresAt: Date.now() - 1 }); expect(unsealPending(pending)).toBeNull(); });
 });
 describe("Plex payload and policy helpers", () => {
