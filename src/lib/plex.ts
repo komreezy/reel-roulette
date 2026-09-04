@@ -60,8 +60,8 @@ export async function resolveServer(token: string, clientId: string, id: string)
   for (const credential of [...new Set([server.accessToken, token])]) {
     for (const connection of connections) {
       const uri = connection.uri.replace(/\/$/, "");
-      const context = { stage: "identity", credential: credential === server.accessToken ? "resource" : "jwt", connection: connection.relay === true || connection.relay === "1" ? "relay" : "direct", host: hostKind(uri) }; const started = Date.now();
-      try { const probe = await fetchWithTimeout(`${uri}/identity`, credential, clientId); diagnostic({ ...context, outcome: "http", status: probe.status, elapsedMs: Date.now() - started }); if (probe.ok) return { uri, token: credential, machineIdentifier: server.machineIdentifier, credentialKind: context.credential, connectionKind: context.connection, hostKind: context.host } as ResolvedConnection; }
+      const context = { stage: "sections-probe", credential: credential === server.accessToken ? "resource" : "jwt", connection: connection.relay === true || connection.relay === "1" ? "relay" : "direct", host: hostKind(uri) }; const started = Date.now();
+      try { let probe = await fetchWithTimeout(`${uri}/library/sections`, credential, clientId); if (probe.status === 404) probe = await fetchWithTimeout(`${uri}/library/sections/all`, credential, clientId); diagnostic({ ...context, outcome: "http", status: probe.status, elapsedMs: Date.now() - started }); if (probe.ok) return { uri, token: credential, machineIdentifier: server.machineIdentifier, credentialKind: context.credential, connectionKind: context.connection, hostKind: context.host } as ResolvedConnection; }
       catch (error) { diagnostic({ ...context, outcome: "error", error: error instanceof PlexError ? error.code : "unknown", elapsedMs: Date.now() - started }); continue; }
     }
   }
