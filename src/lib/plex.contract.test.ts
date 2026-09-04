@@ -1,9 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getLibraries, getMovies, getResources, resolveServer } from "./plex";
+import { fetchWithDeadline, getLibraries, getMovies, getResources, resolveServer } from "./plex";
 
 afterEach(() => vi.restoreAllMocks());
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json" } });
 describe("Plex adapter contracts", () => {
+  it("returns control when an upstream fetch ignores AbortSignal", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(() => new Promise<Response>(() => undefined));
+    await expect(fetchWithDeadline("https://server.plex.direct:32400", {}, 5)).rejects.toThrow("timed out");
+  });
   it("parses the top-level array returned by the Plex resources API", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(json([{ clientIdentifier: "machine-1", name: "Home", product: "Plex Media Server", accessToken: "server-token", connections: [{ uri: "https://server.plex.direct:32400", local: false, relay: false }] }]));
     const resources = await getResources("account-token", "client-1");

@@ -36,9 +36,14 @@ export async function readLimitedBytes(response: Response, limit: number): Promi
 async function read(response: Response): Promise<unknown> {
   const text = new TextDecoder().decode(await readLimitedBytes(response, MAX_BODY)); return (response.headers.get("content-type") ?? "").includes("json") ? JSON.parse(text) : text;
 }
+export async function fetchWithDeadline(input: string, init: RequestInit = {}, timeoutMs = TIMEOUT_MS): Promise<Response> {
+  const controller = new AbortController(); let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<Response>((_, reject) => { timer = setTimeout(() => { controller.abort(); reject(new Error("Plex request timed out.")); }, timeoutMs); });
+  try { return await Promise.race([fetch(input, { ...init, signal: controller.signal }), deadline]); }
+  finally { if (timer) clearTimeout(timer); }
+}
 async function fetchWithTimeout(url: string, token: string, clientId: string, init: RequestInit = {}) {
-  const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  try { const response = await fetch(url, { ...init, redirect: "manual", cache: "no-store", signal: controller.signal, headers: { Accept: "application/json, application/xml", "X-Plex-Token": token, "X-Plex-Client-Identifier": clientId, "X-Plex-Product": PLEX_PRODUCT, ...(init.headers ?? {}) } }); if (response.status === 401 || response.status === 403) throw new PlexError("unauthorized", "Plex authorization expired."); return response; } catch (e) { if (e instanceof PlexError) throw e; throw new PlexError("unreachable", "This Plex server could not be reached. Hosted apps need secure Remote Access or Relay."); } finally { clearTimeout(timeout); }
+  try { const response = await fetchWithDeadline(url, { ...init, redirect: "manual", cache: "no-store", headers: { Accept: "application/json, application/xml", "X-Plex-Token": token, "X-Plex-Client-Identifier": clientId, "X-Plex-Product": PLEX_PRODUCT, ...(init.headers ?? {}) } }); if (response.status === 401 || response.status === 403) throw new PlexError("unauthorized", "Plex authorization expired."); return response; } catch (e) { if (e instanceof PlexError) throw e; throw new PlexError("unreachable", "This Plex server could not be reached. Hosted apps need secure Remote Access or Relay."); }
 }
 export async function getResources(token: string, clientId: string): Promise<Resource[]> {
   const response = await fetchWithTimeout(`${PLEX_CLIENTS_URL}/api/v2/resources?includeHttps=1&includeRelay=1&includeIPv6=1`, token, clientId); if (!response.ok) throw new PlexError("upstream", "Plex resources could not be loaded.");
