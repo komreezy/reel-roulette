@@ -53,10 +53,13 @@ export function orderedConnections(server: Pick<Resource, "rawConnections">) { r
 export function chooseConnection(server: Pick<Resource, "rawConnections">) { return orderedConnections(server)[0] ?? null; }
 export async function resolveServer(token: string, clientId: string, id: string) {
   const server = (await getResources(token, clientId)).find(s => s.id === id); if (!server) throw new PlexError("unreachable", "This Plex server is no longer available.");
-  for (const connection of orderedConnections(server)) {
-    const uri = connection.uri.replace(/\/$/, "");
-    try { const probe = await fetchWithTimeout(`${uri}/identity`, server.accessToken, clientId); if (probe.ok) return { uri, token: server.accessToken, machineIdentifier: server.machineIdentifier }; }
-    catch { continue; }
+  const connections = orderedConnections(server);
+  for (const credential of [...new Set([server.accessToken, token])]) {
+    for (const connection of connections) {
+      const uri = connection.uri.replace(/\/$/, "");
+      try { const probe = await fetchWithTimeout(`${uri}/identity`, credential, clientId); if (probe.ok) return { uri, token: credential, machineIdentifier: server.machineIdentifier }; }
+      catch { continue; }
+    }
   }
   throw new PlexError("unreachable", "This server could not be reached through secure Remote Access or Plex Relay.");
 }

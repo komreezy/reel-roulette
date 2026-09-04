@@ -27,6 +27,15 @@ describe("Plex adapter contracts", () => {
     });
     await expect(resolveServer("account-token", "client-1", "machine-1")).resolves.toMatchObject({ uri: "https://relay.plex.tv:443/machine-1" });
   });
+  it("uses the Plex JWT when a resource token is rejected by PMS", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.startsWith("https://clients.plex.tv/api/v2/resources")) return json([{ clientIdentifier: "machine-1", name: "Home", product: "Plex Media Server", accessToken: "resource-token", connections: [{ uri: "https://direct.plex.direct:32400", local: false, relay: false }] }]);
+      const requestToken = new Headers(init?.headers).get("X-Plex-Token");
+      return json({}, requestToken === "account-token" ? 200 : 401);
+    });
+    await expect(resolveServer("account-token", "client-1", "machine-1")).resolves.toMatchObject({ token: "account-token", uri: "https://direct.plex.direct:32400" });
+  });
   it("falls back to sections/all only for a 404 and paginates until total", async () => {
     const fetcher = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => { const url = String(input); if (url.endsWith("/library/sections")) return json({}, 404); if (url.endsWith("/library/sections/all")) return json({ MediaContainer: { Directory: [{ key: 7, type: "movie", title: "Films" }] } }); const start = new URL(url).searchParams; return json({ MediaContainer: { offset: Number(start.get("x") ?? 0), totalSize: 2, Video: [{ ratingKey: String(start.get("page") ?? "1"), title: "Film", year: "2024", duration: 600000 }] } }); });
     const connection = { uri: "https://server", token: "server-token" }; expect((await getLibraries(connection, "client-1"))[0].key).toBe("7");

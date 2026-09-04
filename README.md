@@ -13,7 +13,7 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Unauthenticated visitors get a clearly labeled secondary demo shelf. Connect Plex to start the current JWT PIN flow: a per-session Ed25519 keypair, key ID, and random client identifier are generated server-side; the pending PIN and private key are encrypted in an HttpOnly cookie. The browser receives only Plex’s authorization URL and polls the server. A hosted Vercel deployment accepts only non-local HTTPS connections on Plex-managed `plex.direct`, `plex.services`, or `relay.plex.tv` hosts; it probes direct connections before falling back to Relay. LAN-only or custom-host connections are reported as unreachable honestly.
+Unauthenticated visitors get a clearly labeled secondary demo shelf. Connect Plex to start the current JWT PIN flow: a per-session Ed25519 keypair, key ID, and random client identifier are generated server-side; the pending PIN and private key are encrypted in an HttpOnly cookie. The browser receives only Plex’s authorization URL and polls the server. A hosted Vercel deployment accepts only non-local HTTPS connections on Plex-managed `plex.direct`, `plex.services`, or `relay.plex.tv` hosts; it tries resource-scoped credentials first, the documented Plex account JWT fallback second, and probes direct connections before falling back to Relay. LAN-only or custom-host connections are reported as unreachable honestly.
 
 ## Deploy to Vercel
 
