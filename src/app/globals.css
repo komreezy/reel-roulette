@@ -26,6 +26,11 @@ h1 em { color: var(--amber); font-style: italic; }
 .line-label { color: var(--amber); font: 10px var(--mono); letter-spacing: .12em; text-transform: uppercase; }
 .connection-note p { margin: 10px 0 0; }
 .library-controls { display: grid; grid-template-columns: 1fr 1fr auto; gap: 6px; margin-top: 14px; }
+.source-controls { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 14px; }
+.source-controls label { color: var(--muted); font: 10px var(--mono); text-transform: uppercase; letter-spacing: .08em; }
+.source-controls input { display: block; width: 100%; margin-top: 6px; background: var(--surface); border: 1px solid var(--rule); color: var(--ivory); padding: 9px 8px; font-size: 11px; border-radius: 0; }
+.source-controls select, .source-controls input, .source-controls .small-button { min-height: 44px; }
+.source-controls .small-button { margin-top: 6px; width: 100%; }
 .connection-note .connection-feedback { color: var(--amber); font: 10px/1.45 var(--mono); letter-spacing: .02em; }
 select { background: var(--surface); border: 1px solid var(--rule); color: var(--ivory); padding: 9px 8px; font-size: 11px; border-radius: 0; min-width: 0; }
 .small-button { background: var(--amber); border: 0; color: var(--graphite); padding: 0 11px; font-size: 11px; cursor: pointer; }
