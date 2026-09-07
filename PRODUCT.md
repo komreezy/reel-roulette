@@ -16,7 +16,7 @@ People who operate or share access to a Plex Media Server and want to choose a m
 
 ## Product Purpose
 
-Connect to Plex, retrieve a real movie library, narrow the eligible pool, and make a fair random selection through a satisfying wheel interaction. Success means a user can connect, spin, inspect the result, and open it in Plex within one short session.
+Load a real movie pool from Plex or a public Letterboxd watchlist, curated list, or diary, narrow the eligible pool, and make a fair random selection through a satisfying wheel interaction. Success means a user can load a source, spin, inspect the result, and open it in the originating service within one short session.
 
 ## Positioning
 
@@ -29,6 +29,7 @@ Users arrive through a public Vercel deployment or a self-hosted instance. They 
 ## Capabilities and Constraints
 
 - Plex PIN authentication and Plex server/library discovery.
+- Public Letterboxd watchlist, curated-list URL, diary, and combined imports without Letterboxd credentials.
 - Movies only in version one.
 - Filters: library, watched state, genre, and maximum runtime.
 - Wheel animation is the initial selection visualization; future animation modes may be interchangeable.

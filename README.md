@@ -1,8 +1,12 @@
 # Reel Roulette
 
-One fair turn through a Plex movie library. Reel Roulette connects through Plex PIN authentication, lets you narrow the eligible shelf, and chooses one film without recommendations or a database.
+One fair turn through your own movie list. Reel Roulette can use a Plex movie library or a public Letterboxd watchlist, curated list, or diary, then chooses one film without recommendations or a database.
 
-Reel Roulette is an independent open-source project and is not affiliated with or endorsed by Plex, Inc. Plex is a trademark of Plex, Inc.
+Reel Roulette is an independent open-source project and is not affiliated with or endorsed by Plex or Letterboxd. Their names and marks belong to their respective owners.
+
+## Letterboxd public datasets
+
+Choose Letterboxd in the source control. Enter a public username to import its Watchlist, Diary, or Watchlist + diary dataset, or paste the URL of any public curated list. The server fetches only validated public Letterboxd paths, without credentials or cookies, and applies bounded time, size, page, and film limits. Imported films remain in memory, use the same uniform wheel, and expose their canonical Letterboxd film URL in details. Diary entries are marked watched; combined imports deduplicate films by canonical external URL and preserve diary watch history.
 
 ## Local setup
 
@@ -21,10 +25,10 @@ Import this repository into Vercel, set `SESSION_SECRET` to a strong random valu
 
 ## Privacy
 
-The Plex JWT and client ID are sealed with AES-GCM in an HttpOnly cookie and expire after eight hours. Per-server resource tokens are re-discovered server-side when needed; none of these credentials are written to localStorage or exposed to client JavaScript. Plex metadata exists only in the request/client session and is not persisted by the app. Images are proxied only for validated metadata artwork paths from a re-discovered Plex resource. JWT nonce refresh is out of scope; users reconnect after the app session expires.
+The Plex JWT and client ID are sealed with AES-GCM in an HttpOnly cookie and expire after eight hours. Per-server resource tokens are re-discovered server-side when needed; none of these credentials are written to localStorage or exposed to client JavaScript. Plex metadata exists only in the request/client session and is not persisted by the app. Images are proxied only for validated metadata artwork paths from a re-discovered Plex resource. Letterboxd imports use only the public username or curated-list URL and public numbered pages; no Letterboxd credentials or cookies are requested. JWT nonce refresh is out of scope; users reconnect after the app session expires.
 
 ## Commands
 
-`npm test` runs domain and security tests. `npm run test:e2e` starts or reuses the local app and runs desktop and mobile browser flows. `npm run lint`, `npm run typecheck`, and `npm run build` are the release checks.
+`npm test` runs domain and security tests. `npm run test:e2e` starts or reuses the local app and runs desktop and mobile browser flows, including a mocked Letterboxd import. `npm run lint`, `npm run typecheck`, and `npm run build` are the release checks.
 
 See [SECURITY.md](SECURITY.md), [CONTRIBUTING.md](CONTRIBUTING.md), and [LICENSE](LICENSE).

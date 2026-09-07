@@ -12,10 +12,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "entities": "^6.0.1",
     "jose": "^6.0.11",
     "next": "16.3.4",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "server-only": "^0.0.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
