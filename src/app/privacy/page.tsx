@@ -1,2 +1,28 @@
 import Link from "next/link";
-export default function PrivacyPage() { return <main className="shell"><header className="topbar"><Link className="wordmark" href="/" aria-label="Reel Roulette home"><span className="reel-mark">R</span> Reel Roulette</Link></header><article className="privacy-copy"><h1>Privacy, plainly.</h1><p>Reel Roulette has no database. Plex credentials and per-server access tokens stay inside encrypted, HttpOnly cookies on the server and expire with the eight-hour app session. Movie metadata is held only for the active request and browser session.</p><p>For Letterboxd imports, the server requests only public watchlist, diary, or curated-list pages using the public Letterboxd username or list URL you enter. No Letterboxd password, token, or cookie is requested or stored. The imported public film metadata remains only in the active browser session.</p><p>Hosted deployments can reach secure Remote Access or Relay connections, not a Plex server that exists only on your home LAN. Plex’s seven-day JWT nonce refresh is intentionally out of scope for this version.</p><p><Link href="/">Return to the roulette</Link></p></article></main>; }
+export default function PrivacyPage() {
+  return (
+    <main className="privacy-page">
+      <Link className="brand" href="/">
+        reel roulette
+      </Link>
+      <h1>Privacy, plainly.</h1>
+      <p>
+        Reel Roulette has no database. Your imported films and the movies you
+        have pulled stay in this browser session. Refreshing the page clears
+        your shelf.
+      </p>
+      <p>
+        When you enter a Letterboxd username or list URL, our server reads its
+        public pages. We never ask for a Letterboxd password, token, or cookie.
+        Private lists cannot be imported.
+      </p>
+      <p>
+        Opening a film takes you to Letterboxd in a new tab, where Letterboxd’s
+        own privacy policy applies.
+      </p>
+      <p>
+        <Link href="/">Back to the archive ↗</Link>
+      </p>
+    </main>
+  );
+}

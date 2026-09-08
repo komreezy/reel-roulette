@@ -1,31 +1,31 @@
 # Reel Roulette
 
-One fair turn through your own movie list. Reel Roulette can use a Plex movie library or a public Letterboxd watchlist, curated list, or diary, then chooses one film without recommendations or a database.
+Leave tonight to chance. Import a public Letterboxd watchlist or list and pull one movie out of the Living Archive: a glossy, animated wall of rounded tiles. Each film appears once per cycle; the shelf silently starts again when the cycle ends.
 
 Reel Roulette is an independent open-source project and is not affiliated with or endorsed by Plex or Letterboxd. Their names and marks belong to their respective owners.
 
 ## Letterboxd public datasets
 
-Choose Letterboxd in the source control. Enter a public username to import its Watchlist, Diary, or Watchlist + diary dataset, or paste the URL of any public curated list. The server fetches only validated public Letterboxd paths, without credentials or cookies, and applies bounded time, size, page, and film limits. Imported films remain in memory, use the same uniform wheel, and expose their canonical Letterboxd film URL in details. Diary entries are marked watched; combined imports deduplicate films by canonical external URL and preserve diary watch history.
+Enter a public username under Watchlist, or choose List URL and paste a public curated list. The existing server fetcher validates public Letterboxd paths and enforces bounded time, size, page, and film limits. No credentials or cookies are requested. Film data stays in memory. Current imports provide title, optional year, and a canonical Letterboxd URL; the cassette uses a designed typographic label without requiring poster artwork.
 
 ## Local setup
 
 ```bash
 npm install
-cp .env.example .env.local
-# set SESSION_SECRET to 32+ random characters
 npm run dev
 ```
 
-Unauthenticated visitors get a clearly labeled secondary demo shelf. Connect Plex to start the current JWT PIN flow: a per-session Ed25519 keypair, key ID, and random client identifier are generated server-side; the pending PIN and private key are encrypted in an HttpOnly cookie. The browser receives only Plex’s authorization URL and polls the server. A hosted Vercel deployment accepts only non-local HTTPS connections on Plex-managed `plex.direct`, `plex.services`, or `relay.plex.tv` hosts; it tries resource-scoped credentials first, the documented Plex account JWT fallback second, and probes direct connections before falling back to Relay. LAN-only or custom-host connections are reported as unreachable honestly.
+Use the demo shelf to try the complete experience without importing a list. The responsive WebGL scene uses React Three Fiber, Three.js, GSAP, and a custom GLSL sheen. Fonts and reflections are served/generated locally. Reduced motion and unavailable WebGL retain a functional HTML/CSS selection path.
+
+Plex is deferred for a later integration. Its existing API routes and security adapters remain intact, but the new interface never calls them. To exercise those retained endpoints, copy `.env.example` to `.env.local` and configure the documented session secret and origin. Diary/combined fetching is likewise retained as backend functionality only.
 
 ## Deploy to Vercel
 
-Import this repository into Vercel, set `SESSION_SECRET` to a strong random value and `APP_ORIGIN` to the deployment’s canonical HTTPS origin in Project Settings → Environment Variables, and deploy. No database or other integration is required. Self-hosting uses the same environment variables and `npm run build && npm start`.
+Import this repository into Vercel and deploy as a Next.js app. The current Letterboxd interface needs no secrets or database. Self-hosting uses `npm run build && npm start`. Configure `SESSION_SECRET` and `APP_ORIGIN` before using the retained Plex endpoints; see `.env.example` and [SECURITY.md](SECURITY.md).
 
 ## Privacy
 
-The Plex JWT and client ID are sealed with AES-GCM in an HttpOnly cookie and expire after eight hours. Per-server resource tokens are re-discovered server-side when needed; none of these credentials are written to localStorage or exposed to client JavaScript. Plex metadata exists only in the request/client session and is not persisted by the app. Images are proxied only for validated metadata artwork paths from a re-discovered Plex resource. Letterboxd imports use only the public username or curated-list URL and public numbered pages; no Letterboxd credentials or cookies are requested. JWT nonce refresh is out of scope; users reconnect after the app session expires.
+There is no database or localStorage history. Letterboxd imports use the public username or curated-list URL and public numbered pages. No Letterboxd credentials or cookies are requested. Refreshing the page clears the collection and pull history. See [SECURITY.md](SECURITY.md) for the retained Plex adapters’ security model.
 
 ## Commands
 

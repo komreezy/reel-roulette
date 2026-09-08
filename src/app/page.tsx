@@ -1,107 +1,676 @@
 "use client";
-/* eslint-disable @next/next/no-html-link-for-pages */
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import type { Movie, MovieFilters, PlexLibrary, PlexServer } from "@/lib/models";
-import { chooseUniform, filterMovies, visualSample } from "@/lib/selection";
 
-const demoPalettes = [
-  "linear-gradient(145deg, #9f5f43 0 42%, #22343b 42% 70%, #d7b06a 70%)",
-  "linear-gradient(160deg, #203b4a, #744b62 54%, #d9a45c)",
-  "linear-gradient(135deg, #d49a71 0 36%, #688b84 36% 68%, #7b3230 68%)",
-  "linear-gradient(155deg, #101b28, #49566b 58%, #b37c54)",
-  "linear-gradient(140deg, #1c3542, #b46c62 62%, #e6c4a2)",
-  "linear-gradient(150deg, #101719, #4b5c57 52%, #b18a5a)",
-  "linear-gradient(135deg, #201b16, #bb8f3c 48%, #6e2520)",
-  "linear-gradient(155deg, #315f66, #a46f7c 56%, #d4b86d)",
-];
-const demoMovies: Movie[] = ["Arrival", "Moonlight", "The Grand Budapest Hotel", "Blade Runner 2049", "Portrait of a Lady on Fire", "The Lighthouse", "Whiplash", "Spirited Away"].map((title, i) => ({ id: `demo-${i}`, title, year: 2016 - i, runtimeMinutes: 100 + i * 7, genres: [["Sci-Fi"],["Drama"],["Comedy"],["Sci-Fi"],["Romance"],["Horror"],["Drama"],["Animation"]][i], watched: i === 1 || i === 5, demoArtwork: demoPalettes[i], plexKey: `demo-${i}`, libraryKey: "demo" }));
-const path = (name: string) => ({ sliders: "M4 6h16M8 12h12M13 18h7", close: "M6 6l12 12M18 6 6 18", play: "M8 5v14l11-7z", external: "M14 5h5v5M19 5l-9 9" }[name]);
-function Icon({ name }: { name: "sliders" | "close" | "play" | "external" }) { return <svg aria-hidden="true" viewBox="0 0 24 24" className="icon"><path d={path(name)} /></svg>; }
-class ApiError extends Error { constructor(message: string, public diagnostics?: { attempts?: { connection?: string; host?: string; outcome?: string; status?: number; error?: string; elapsedMs?: number }[] }) { super(message); } }
-async function api<T>(url: string, init?: RequestInit): Promise<T> { const response = await fetch(url, { ...init, cache: "no-store" }); const body = await response.json(); if (!response.ok) throw new ApiError(body.error ?? "Request failed.", body.diagnostics); return body; }
-function diagnosticText(error: unknown) { if (!(error instanceof ApiError) || !error.diagnostics?.attempts?.length) return ""; return ` Route check: ${error.diagnostics.attempts.map(attempt => `${attempt.connection ?? "route"}/${attempt.host ?? "Plex"}: ${attempt.outcome === "http" ? `HTTP ${attempt.status}` : attempt.error ?? "failed"} (${attempt.elapsedMs ?? 0} ms)`).join("; ")}.`; }
-type LetterboxdDataset = "watchlist" | "list" | "combined" | "diary";
-const datasetLabel = (dataset: LetterboxdDataset) => dataset === "watchlist" ? "Watchlist" : dataset === "list" ? "List" : dataset === "combined" ? "Watchlist + diary" : "Diary";
-function mergeLetterboxdFilms(watchlist: Movie[], diary: Movie[]) {
-  const merged = new Map<string, Movie>();
-  for (const film of [...watchlist, ...diary]) {
-    const key = film.externalUrl ?? film.id;
-    const prior = merged.get(key);
-    merged.set(key, prior ? { ...prior, watched: prior.watched || film.watched } : film);
+import dynamic from "next/dynamic";
+import Link from "next/link";
+import {
+  Component,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type CSSProperties,
+  type FormEvent,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
+import { useArchive } from "@/components/archive/use-archive";
+import type { ArchivePull, HeroBounds } from "@/lib/archive-types";
+
+const ArchiveScene = dynamic(
+  () => import("@/components/archive/archive-scene"),
+  { ssr: false },
+);
+
+function Icon({
+  name,
+}: {
+  name: "arrow" | "external" | "close" | "pause" | "play" | "shelf" | "reset";
+}) {
+  const paths = {
+    arrow: "M4 12h15m-6-6 6 6-6 6",
+    external: "M7 17 17 7M7 7h10v10",
+    close: "m6 6 12 12M6 18 18 6",
+    pause: "M8 5v14M16 5v14",
+    play: "m9 5 10 7-10 7V5Z",
+    shelf: "M5 5v14M12 3v16M19 7v12M3 21h18",
+    reset: "M4 10a8 8 0 1 1 1 7M4 4v6h6",
+  };
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d={paths[name]} />
+    </svg>
+  );
+}
+function subscribeMotion(callback: () => void) {
+  const query = window.matchMedia("(prefers-reduced-motion: reduce)");
+  query.addEventListener("change", callback);
+  return () => query.removeEventListener("change", callback);
+}
+const getMotion = () =>
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const getServerMotion = () => true;
+function subscribeVisibility(callback: () => void) {
+  document.addEventListener("visibilitychange", callback);
+  return () => document.removeEventListener("visibilitychange", callback);
+}
+const getHidden = () => document.hidden;
+const getServerHidden = () => false;
+
+class SceneBoundary extends Component<
+  { children: ReactNode; onFail: () => void },
+  { failed: boolean }
+> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
   }
-  return [...merged.values()];
+  componentDidCatch() {
+    this.props.onFail();
+  }
+  render() {
+    return this.state.failed ? null : this.props.children;
+  }
+}
+function FlatCassette({ pull }: { pull: ArchivePull }) {
+  return (
+    <div
+      className="flat-cassette"
+      style={{ "--accent": pull.accent } as CSSProperties}
+      aria-hidden="true"
+    >
+      <div className="cassette-rim">
+        <div className="cassette-label">
+          <div className="cassette-label-top">
+            <span>REEL ROULETTE</span>
+            <span>№ {String(pull.serial).padStart(3, "0")}</span>
+          </div>
+          <strong>{pull.movie.title}</strong>
+          <div className="cassette-label-bottom">
+            <span>{pull.movie.year ?? "FEATURE FILM"}</span>
+            <span>AN EVENING LEFT TO CHANCE ↗</span>
+          </div>
+        </div>
+      </div>
+      <span className="cassette-edge">RR / THE LIVING ARCHIVE</span>
+    </div>
+  );
 }
 
 export default function Home() {
-  const [movies, setMovies] = useState<Movie[]>([]); const [demo, setDemo] = useState(false); const [sourceType, setSourceType] = useState<"plex" | "letterboxd">("plex"); const [letterboxdDataset, setLetterboxdDataset] = useState<LetterboxdDataset>("watchlist"); const [letterboxdUsername, setLetterboxdUsername] = useState(""); const [letterboxdListUrl, setLetterboxdListUrl] = useState(""); const [connected, setConnected] = useState(false); const [servers, setServers] = useState<PlexServer[]>([]); const [libraries, setLibraries] = useState<PlexLibrary[]>([]); const [serverId, setServerId] = useState(""); const [libraryId, setLibraryId] = useState("");
-  const [filters, setFilters] = useState<MovieFilters>({ watched: "all", genres: [], maxRuntime: null }); const [excluded, setExcluded] = useState<Set<string>>(new Set()); const [winner, setWinner] = useState<Movie | null>(null); const [wheelMovies, setWheelMovies] = useState<Movie[]>([]); const [filtersOpen, setFiltersOpen] = useState(false); const [spinning, setSpinning] = useState(false); const [turn, setTurn] = useState(0); const [notice, setNotice] = useState("Connect Plex to use your library."); const [loading, setLoading] = useState(false); const sourceGeneration = useRef(0); const lastFocus = useRef<HTMLElement | null>(null); const dialogTitle = useRef<HTMLHeadingElement>(null); const dialog = useRef<HTMLElement>(null);
-  const source = demo ? demoMovies : movies; const eligible = useMemo(() => filterMovies(source, filters, excluded), [source, filters, excluded]); const genres = useMemo(() => [...new Set(source.flatMap(m => m.genres))].sort(), [source]); const sectors = spinning || winner ? wheelMovies : visualSample(eligible, 8); const activeServer = servers.find(s => s.id === serverId);
-  useEffect(() => { api<{ authenticated: boolean }>("/api/plex/auth/status").then(r => { if (r.authenticated) { setConnected(true); loadServers(); } }).catch(() => undefined); }, []);
-  useEffect(() => {
-    if (!winner) return;
-    dialogTitle.current?.focus();
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") { event.preventDefault(); closeWinner(); return; }
-      if (event.key !== "Tab") return;
-      const focusable = [...(dialog.current?.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])') ?? [])];
-      if (!focusable.length) return;
-      const first = focusable[0]; const last = focusable[focusable.length - 1];
-      const active = document.activeElement;
-      if (active === dialogTitle.current || !dialog.current?.contains(active)) { event.preventDefault(); (event.shiftKey ? last : first).focus(); }
-      else if (event.shiftKey && active === first) { event.preventDefault(); last.focus(); }
-      else if (!event.shiftKey && active === last) { event.preventDefault(); first.focus(); }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => { window.removeEventListener("keydown", onKey); document.body.style.overflow = previousOverflow; };
-  }, [winner]);
-  async function loadServers() { try { const r = await api<{ servers: PlexServer[] }>("/api/plex/servers"); setServers(r.servers); setNotice(`${r.servers.length} secure server${r.servers.length === 1 ? "" : "s"} found.`); } catch (e) { setNotice((e as Error).message); } }
-  async function connect() { setLoading(true); setNotice("Opening Plex authorization…"); try { const r = await api<{ url: string }>("/api/plex/auth/start", { method: "POST" }); window.open(r.url, "plex-auth", "popup,width=560,height=720"); for (let i = 0; i < 90; i++) { await new Promise(resolve => window.setTimeout(resolve, 1000)); const state = await api<{ authenticated: boolean; expired?: boolean }>("/api/plex/auth/status"); if (state.authenticated) { setConnected(true); setNotice("Plex connected. Choose a server."); await loadServers(); return; } if (state.expired) break; } setNotice("Plex authorization expired. Start again when you’re ready."); } catch (e) { setNotice((e as Error).message); } finally { setLoading(false); } }
-  async function chooseServer(id: string) { const generation = ++sourceGeneration.current; clearPendingSelection(); setServerId(id); setLibraryId(""); setLibraries([]); setMovies([]); if (!id) { setLoading(false); setNotice("Choose a Plex server."); return; } setLoading(true); setNotice("Checking secure Plex routes…"); try { const r = await api<{ libraries: PlexLibrary[] }>(`/api/plex/libraries?server=${encodeURIComponent(id)}`); if (generation !== sourceGeneration.current) return; setLibraries(r.libraries); setNotice("Choose a movie library."); } catch (e) { if (generation === sourceGeneration.current) setNotice(`${(e as Error).message}${diagnosticText(e)}`); } finally { if (generation === sourceGeneration.current) setLoading(false); } }
-  async function chooseLibrary(id: string) { const generation = ++sourceGeneration.current; clearPendingSelection(); setLibraryId(id); setMovies([]); if (!id || !serverId) { setLoading(false); setNotice("Choose a movie library."); return; } setLoading(true); try { const r = await api<{ movies: Movie[] }>(`/api/plex/movies?server=${encodeURIComponent(serverId)}&library=${encodeURIComponent(id)}`); if (generation !== sourceGeneration.current) return; setMovies(r.movies.map(m => ({ ...m, machineIdentifier: activeServer?.machineIdentifier }))); setNotice(`${r.movies.length} movies loaded.`); } catch (e) { if (generation === sourceGeneration.current) setNotice((e as Error).message); } finally { if (generation === sourceGeneration.current) setLoading(false); } }
-  async function importLetterboxd() { const generation = ++sourceGeneration.current; clearPendingSelection(); setLoading(true); setDemo(false); setMovies([]); setNotice(`Importing Letterboxd ${datasetLabel(letterboxdDataset).toLowerCase()}…`); try { let imported: Movie[]; if (letterboxdDataset === "list") { const result = await api<{ films: Movie[] }>(`/api/letterboxd/list?url=${encodeURIComponent(letterboxdListUrl.trim())}`); imported = result.films; } else { const username = encodeURIComponent(letterboxdUsername.trim()); const watchlist = letterboxdDataset === "diary" ? Promise.resolve({ films: [] as Movie[] }) : api<{ films: Movie[] }>(`/api/letterboxd/watchlist?username=${username}`); const diary = letterboxdDataset === "watchlist" ? Promise.resolve({ films: [] as Movie[] }) : api<{ films: Movie[] }>(`/api/letterboxd/diary?username=${username}`); const [watchlistResult, diaryResult] = await Promise.all([watchlist, diary]); imported = mergeLetterboxdFilms(watchlistResult.films, diaryResult.films); } if (generation !== sourceGeneration.current) return; setMovies(imported); setNotice(`${imported.length} film${imported.length === 1 ? "" : "s"} imported from Letterboxd ${datasetLabel(letterboxdDataset).toLowerCase()}.`); } catch (e) { if (generation === sourceGeneration.current) setNotice((e as Error).message); } finally { if (generation === sourceGeneration.current) setLoading(false); } }
-  function clearPendingSelection() { setSpinning(false); setWinner(null); setWheelMovies([]); }
-  function chooseSource(value: "plex" | "letterboxd") { sourceGeneration.current += 1; setLoading(false); clearPendingSelection(); setSourceType(value); setDemo(false); setMovies([]); if (value === "letterboxd") { setServerId(""); setLibraryId(""); setLibraries([]); } setNotice(value === "letterboxd" ? "Enter a public Letterboxd username." : connected ? "Choose a Plex server." : "Connect Plex to use your library."); }
-  function chooseLetterboxdDataset(value: LetterboxdDataset) { sourceGeneration.current += 1; setLoading(false); clearPendingSelection(); setLetterboxdDataset(value); setMovies([]); setNotice(value === "list" ? "Paste a public Letterboxd list URL." : "Enter a public Letterboxd username."); }
-  function changeLetterboxdUsername(value: string) { sourceGeneration.current += 1; setLoading(false); clearPendingSelection(); setLetterboxdUsername(value); setMovies([]); setNotice("Enter a public Letterboxd username."); }
-  function changeLetterboxdListUrl(value: string) { sourceGeneration.current += 1; setLoading(false); clearPendingSelection(); setLetterboxdListUrl(value); setMovies([]); setNotice("Paste a public Letterboxd list URL."); }
+  const archive = useArchive();
+  const { reveal } = archive;
+  const reducedMotion = useSyncExternalStore(
+    subscribeMotion,
+    getMotion,
+    getServerMotion,
+  );
+  const hidden = useSyncExternalStore(
+    subscribeVisibility,
+    getHidden,
+    getServerHidden,
+  );
+  const [paused, setPaused] = useState(false);
+  const [sourceKind, setSourceKind] = useState<"watchlist" | "list">(
+    "watchlist",
+  );
+  const [username, setUsername] = useState("");
+  const [listUrl, setListUrl] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [webglReady, setWebglReady] = useState(false);
+  const [webglFailed, setWebglFailed] = useState(false);
+  const [heroBounds, setHeroBounds] = useState<HeroBounds | null>(null);
+  const anchor = useRef<HTMLDivElement>(null);
+  const sourceDialog = useRef<HTMLDialogElement>(null);
+  const pullButton = useRef<HTMLButtonElement>(null);
+  const sourceButton = useRef<HTMLButtonElement>(null);
+  const setup = archive.sourceKind === null;
+  const winner = archive.winner;
+  const mode = setup
+    ? "setup"
+    : archive.pulling
+      ? "pulling"
+      : winner
+        ? "result"
+        : "ready";
+  const inputValue = sourceKind === "watchlist" ? username : listUrl;
+  const onSceneReady = useCallback(() => setWebglReady(true), []);
+  const onSceneError = useCallback(() => {
+    setWebglFailed(true);
+    setWebglReady(false);
+  }, []);
 
-  function spin(pool = eligible) {
-    if (spinning) return;
-    const generation = sourceGeneration.current;
-    const next = chooseUniform(pool);
-    if (!next) { setNotice("No movies match these filters. Clear a filter or exclusion."); return; }
-    lastFocus.current = document.activeElement as HTMLElement;
-    const sample = visualSample(pool, 8);
-    if (!sample.some(movie => movie.id === next.id)) sample[sample.length - 1] = next;
-    const winnerIndex = sample.findIndex(movie => movie.id === next.id);
-    setWheelMovies(sample);
-    setSpinning(true);
-    setTurn(current => {
-      const target = -((winnerIndex + 0.5) * 360) / sample.length;
-      const currentAngle = ((current % 360) + 360) % 360;
-      const targetAngle = ((target % 360) + 360) % 360;
-      return current + 1080 + ((targetAngle - currentAngle + 360) % 360);
-    });
-    const reveal = () => { if (generation !== sourceGeneration.current) return; setWinner(next); setSpinning(false); };
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) reveal();
-    else window.setTimeout(reveal, 1050);
+  useEffect(() => {
+    if (webglReady || webglFailed) return;
+    // Async renderer creation failures must still leave a usable shelf.
+    const timer = window.setTimeout(onSceneError, 8000);
+    return () => window.clearTimeout(timer);
+  }, [webglReady, webglFailed, onSceneError]);
+
+  useEffect(() => {
+    const element = anchor.current;
+    if (!element) return;
+    let frame = 0;
+    const measure = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const rect = element.getBoundingClientRect();
+        setHeroBounds({
+          x: rect.x,
+          y: rect.y,
+          width: rect.width,
+          height: rect.height,
+        });
+      });
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    window.addEventListener("resize", measure);
+    window.addEventListener("scroll", measure, { passive: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+      window.removeEventListener("scroll", measure);
+    };
+  }, [mode]);
+  useEffect(() => {
+    if (editing) sourceDialog.current?.showModal();
+    else sourceDialog.current?.close();
+  }, [editing]);
+  useEffect(() => {
+    if (!archive.pulling || !archive.pull || (!webglFailed && webglReady))
+      return;
+    const serial = archive.pull.serial;
+    const timer = window.setTimeout(
+      () => reveal(serial),
+      reducedMotion ? 120 : 1400,
+    );
+    return () => window.clearTimeout(timer);
+  }, [
+    archive.pulling,
+    archive.pull,
+    reveal,
+    webglFailed,
+    webglReady,
+    reducedMotion,
+  ]);
+
+  function changeKind(kind: "watchlist" | "list") {
+    archive.cancelImport();
+    setSourceKind(kind);
   }
-  function closeWinner() { setWinner(null); lastFocus.current?.focus(); }
-  function excludeAndSpin() { if (!winner) return; const nextExcluded = new Set(excluded).add(winner.id); setExcluded(nextExcluded); closeWinner(); spin(filterMovies(source, filters, nextExcluded)); }
-  async function disconnect() { await fetch("/api/plex/auth/disconnect", { method: "POST" }); setConnected(false); setServers([]); setLibraries([]); setMovies([]); setServerId(""); setLibraryId(""); setNotice("Disconnected. Nothing was saved."); }
-  const artwork = (m: Movie) => m.demoArtwork || (sourceType === "plex" && connected && serverId && m.thumb ? `url(/api/plex/image?server=${encodeURIComponent(serverId)}&path=${encodeURIComponent(m.thumb)})` : undefined);
-  const wheelBackground = sectors.length ? `conic-gradient(${sectors.map((movie, index) => `${movie.demoArtwork ? movie.demoArtwork.match(/#[0-9a-f]{6}/i)?.[0] : index % 2 ? "#20211f" : "#181917"} ${(index * 360) / sectors.length}deg ${((index + 1) * 360) / sectors.length}deg`).join(", ")})` : "var(--surface)";
-  const wheelStyle = { transform: `rotate(${turn}deg)`, background: wheelBackground, "--counter-turn": `${-turn}deg` } as CSSProperties;
-  return <main className="shell"><header className="topbar"><a className="wordmark" href="/" aria-label="Reel Roulette home"><span className="reel-mark">R</span> Reel Roulette</a><div className="top-actions"><span className="status"><span className="status-dot" /> {sourceType === "letterboxd" ? "Letterboxd" : connected ? "Plex connected" : demo ? "Demo mode" : "Not connected"}</span>{sourceType === "plex" && (connected ? <button className="text-button" onClick={disconnect}>Disconnect</button> : <button className="text-button" onClick={connect} disabled={loading}>Connect Plex</button>)}</div></header>
-    <section className="intro"><div><h1>Make the<br /><em>decision.</em></h1><p className="intro-copy">A fair turn through your movie library.<br />No browsing. No recommendations. Just tonight’s film.</p></div><div className="connection-note"><span className="line-label">{demo ? "DEMO SHELF" : sourceType === "letterboxd" ? `LETTERBOXD · ${datasetLabel(letterboxdDataset).toUpperCase()}` : connected ? "CONNECTED" : "READY WHEN YOU ARE"}</span><div className="library-controls source-controls"><label htmlFor="movie-source">Source</label><select id="movie-source" aria-label="Movie source" value={sourceType} onChange={e => chooseSource(e.target.value as "plex" | "letterboxd")}><option value="plex">Plex library</option><option value="letterboxd">Letterboxd</option></select>{sourceType === "letterboxd" ? <><label htmlFor="letterboxd-dataset">Dataset</label><select id="letterboxd-dataset" aria-label="Letterboxd dataset" value={letterboxdDataset} onChange={e => chooseLetterboxdDataset(e.target.value as LetterboxdDataset)}><option value="watchlist">Watchlist</option><option value="list">List URL</option><option value="combined">Watchlist + diary</option><option value="diary">Diary</option></select>{letterboxdDataset === "list" ? <><label htmlFor="letterboxd-list-url">Public list URL</label><input id="letterboxd-list-url" aria-label="Letterboxd list URL" value={letterboxdListUrl} onChange={e => changeLetterboxdListUrl(e.target.value)} placeholder="https://letterboxd.com/user/list/name/" autoComplete="off" /></> : <><label htmlFor="letterboxd-username">Public username</label><input id="letterboxd-username" aria-label="Letterboxd username" value={letterboxdUsername} onChange={e => changeLetterboxdUsername(e.target.value)} placeholder="username" autoComplete="off" /></>}<button className="small-button" onClick={importLetterboxd} disabled={loading || !(letterboxdDataset === "list" ? letterboxdListUrl : letterboxdUsername).trim()}>{`Import ${datasetLabel(letterboxdDataset).toLowerCase()}`}</button></> : <><p>{connected ? "Your Plex credentials stay on the server. Select a secure remote library below." : "Connect Plex for a real library, or use the demo shelf for a visual test."}</p>{connected && <div className="library-controls"><select aria-label="Plex server" value={serverId} onChange={e => chooseServer(e.target.value)}><option value="">Server</option>{servers.map(s => <option value={s.id} key={s.id}>{s.name}</option>)}</select><select aria-label="Movie library" value={libraryId} onChange={e => chooseLibrary(e.target.value)} disabled={!serverId}><option value="">Movie library</option>{libraries.map(l => <option value={l.key} key={l.key}>{l.title}</option>)}</select></div>}</>}</div><p className="connection-feedback">{notice}</p></div></section>
-    <section className="stage" aria-label="Movie roulette"><div className="stage-meta"><span><strong>{eligible.length}</strong> eligible {eligible.length === 1 ? "film" : "films"}{loading ? " · loading" : ""}</span><button className={`filter-trigger ${filtersOpen ? "active" : ""}`} onClick={() => setFiltersOpen(v => !v)} aria-expanded={filtersOpen}><Icon name="sliders" /> Filters {filters.genres.length || filters.watched !== "all" || filters.maxRuntime ? <sup>•</sup> : null}</button></div>
-      {filtersOpen && <div className="filters"><label>Watched<select value={filters.watched} onChange={e => setFilters({ ...filters, watched: e.target.value as MovieFilters["watched"] })}><option value="all">All films</option><option value="unwatched">Unwatched only</option><option value="watched">Watched only</option></select></label><label>Maximum runtime<select value={filters.maxRuntime ?? ""} onChange={e => setFilters({ ...filters, maxRuntime: e.target.value ? Number(e.target.value) : null })}><option value="">Any length</option><option value="90">90 minutes</option><option value="120">120 minutes</option><option value="150">150 minutes</option></select></label><fieldset><legend>Genres</legend><div className="genre-list">{genres.map(g => <label key={g}><input type="checkbox" checked={filters.genres.includes(g)} onChange={() => setFilters({ ...filters, genres: filters.genres.includes(g) ? filters.genres.filter(x => x !== g) : [...filters.genres, g] })} /> {g}</label>)}</div></fieldset><button className="clear-button" onClick={() => setFilters({ watched: "all", genres: [], maxRuntime: null })}>Clear filters</button></div>}
-      <div className="wheel-wrap"><div className="pointer" aria-hidden="true" /><div className="wheel" style={wheelStyle}><svg viewBox="0 0 100 100" aria-hidden="true" focusable="false"><circle cx="50" cy="50" r="49" fill="none" stroke="var(--amber)" strokeWidth=".4" />{sectors.map((_, i) => <line key={i} x1="50" y1="50" x2={50 + 49 * Math.sin((i / Math.max(sectors.length, 1)) * Math.PI * 2)} y2={50 - 49 * Math.cos((i / Math.max(sectors.length, 1)) * Math.PI * 2)} stroke="#eee9dc55" strokeWidth=".35" />)}</svg>{sectors.map((movie, index) => <button className="wheel-label" key={movie.id} disabled={spinning} style={{ left: `${50 + 32 * Math.sin(((index + 0.5) / sectors.length) * Math.PI * 2)}%`, top: `${50 - 32 * Math.cos(((index + 0.5) / sectors.length) * Math.PI * 2)}%`, "--counter-turn": `${-turn}deg` } as CSSProperties} onClick={() => { lastFocus.current = document.activeElement as HTMLElement; setWheelMovies(sectors); setWinner(movie); }}><span>{movie.title}</span></button>)}<div className="wheel-center"><button className="spin-button" onClick={() => spin()} disabled={!eligible.length || loading || spinning} aria-label={spinning ? "Choosing a film" : "Spin"}><Icon name="play" /><span>{spinning ? "Choosing" : "Spin"}</span></button></div></div></div><p className="fairness">Winner selection is uniform across all {eligible.length} eligible films. The wheel shows a readable sample without changing the odds.</p>
-      {sourceType === "plex" && !connected && !demo && <button className="demo-action" onClick={() => { setDemo(true); setNotice("Demo content · Nothing is saved"); }}>Use demo shelf <span>for public visual testing</span></button>}{!source.length && <p className="empty-state">{sourceType === "letterboxd" ? `Import a public Letterboxd ${datasetLabel(letterboxdDataset).toLowerCase()} to begin.` : "Connect Plex or choose the demo shelf to begin."}</p>}
-    </section>
-    <footer className="footer"><span role="status" aria-live="polite">{notice}</span><span className="footer-links"><a href="/privacy">Privacy: no database, short-lived encrypted cookies.</a><span>·</span><a href={process.env.NEXT_PUBLIC_REPOSITORY_URL || "https://github.com/komreezy/reel-roulette"} target="_blank" rel="noreferrer">Open source</a></span></footer>
-    {winner && <div className="dialog-backdrop" role="presentation" onMouseDown={e => { if (e.target === e.currentTarget) closeWinner(); }}><section ref={dialog} className={`detail-sheet ${artwork(winner) ? "" : "no-artwork"}`} role="dialog" aria-modal="true" aria-labelledby="result-title" aria-describedby="result-description"><button className="close-button" onClick={closeWinner} aria-label="Close movie details"><Icon name="close" /></button>{artwork(winner) && <div className="detail-poster" style={{ backgroundImage: artwork(winner) }} />}<div className="detail-copy"><span className="line-label">YOUR NEXT FILM {demo ? "· DEMO" : sourceType === "letterboxd" ? `· LETTERBOXD · ${datasetLabel(letterboxdDataset).toUpperCase()}` : "· PLEX"}</span><h2 id="result-title" tabIndex={-1} ref={dialogTitle}>{winner.title}</h2><p className="meta">{winner.year ?? "Year unknown"} <span>·</span> {winner.runtimeMinutes ? `${winner.runtimeMinutes} min` : "Runtime unknown"} <span>·</span> {winner.genres.join(" · ") || "Uncategorized"}</p><p className="summary" id="result-description">{winner.summary || "No summary supplied. A film waiting for your full attention."}</p><div className="detail-actions">{sourceType === "letterboxd" && winner.externalUrl ? <a className="primary-action" href={winner.externalUrl} target="_blank" rel="noreferrer">Open in Letterboxd <Icon name="external" /></a> : connected && winner.machineIdentifier && <a className="primary-action" href={`https://app.plex.tv/desktop/#!/server/${encodeURIComponent(winner.machineIdentifier)}/details?key=${encodeURIComponent(`/library/metadata/${winner.plexKey}`)}`} target="_blank" rel="noreferrer">Open in Plex <Icon name="external" /></a>}<button className="secondary-action" onClick={() => { closeWinner(); spin(); }}>Spin again</button><button className="secondary-action" onClick={excludeAndSpin}>Exclude &amp; spin again</button></div></div></section></div>}
-  </main>;
+  function changeValue(value: string) {
+    archive.cancelImport();
+    if (sourceKind === "watchlist") setUsername(value);
+    else setListUrl(value);
+  }
+  async function importCollection(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await archive.importSource(sourceKind, inputValue);
+  }
+  const priorSource = useRef(archive.movies);
+  useEffect(() => {
+    if (archive.movies !== priorSource.current && archive.sourceKind !== null) {
+      priorSource.current = archive.movies;
+      const frame = requestAnimationFrame(() => {
+        sourceDialog.current?.close();
+        setEditing(false);
+        pullButton.current?.focus({ preventScroll: true });
+      });
+      return () => cancelAnimationFrame(frame);
+    }
+    priorSource.current = archive.movies;
+  }, [archive.movies, archive.sourceKind]);
+  function closeEditor() {
+    archive.cancelImport();
+    sourceDialog.current?.close();
+    setEditing(false);
+    sourceButton.current?.focus();
+  }
+  function trapSourceFocus(event: KeyboardEvent<HTMLDialogElement>) {
+    if (event.key !== "Tab") return;
+    const controls = Array.from(
+      event.currentTarget.querySelectorAll<HTMLElement>(
+        'button:not(:disabled), input:not(:disabled), a[href], [tabindex="0"]',
+      ),
+    ).filter((element) => element.offsetParent !== null);
+    const first = controls[0];
+    const last = controls[controls.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last?.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first?.focus();
+    }
+  }
+  function resetShelf() {
+    sourceDialog.current?.close();
+    archive.reset();
+    setEditing(false);
+    requestAnimationFrame(() =>
+      document.getElementById("source-input")?.focus({ preventScroll: true }),
+    );
+  }
+
+  const sourceForm = (inDialog = false) => (
+    <form onSubmit={importCollection} className="source-form">
+      <div className="source-tabs" role="group" aria-label="Letterboxd source">
+        <button
+          type="button"
+          aria-pressed={sourceKind === "watchlist"}
+          onClick={() => changeKind("watchlist")}
+        >
+          Watchlist
+        </button>
+        <button
+          type="button"
+          aria-pressed={sourceKind === "list"}
+          onClick={() => changeKind("list")}
+        >
+          List URL
+        </button>
+      </div>
+      <label htmlFor={inDialog ? "edit-source" : "source-input"}>
+        {sourceKind === "watchlist"
+          ? "Your Letterboxd username"
+          : "Public Letterboxd list URL"}
+      </label>
+      <div className="source-input-wrap">
+        {sourceKind === "watchlist" && (
+          <span className="input-prefix" aria-hidden="true">
+            @
+          </span>
+        )}
+        <input
+          id={inDialog ? "edit-source" : "source-input"}
+          value={inputValue}
+          onChange={(event) => changeValue(event.target.value)}
+          placeholder={
+            sourceKind === "watchlist"
+              ? "username"
+              : "https://letterboxd.com/you/list/…"
+          }
+          autoComplete="off"
+          autoCapitalize="none"
+          spellCheck={false}
+          type={sourceKind === "list" ? "url" : "text"}
+          aria-describedby={inDialog ? "edit-feedback" : "source-feedback"}
+          required
+        />
+        <button
+          type="submit"
+          className="import-button"
+          aria-label={archive.loading ? "Importing films" : "Load shelf"}
+          disabled={!inputValue.trim() || archive.loading}
+        >
+          {archive.loading ? (
+            <span className="loader" />
+          ) : (
+            <Icon name="arrow" />
+          )}
+        </button>
+      </div>
+      <p
+        id={inDialog ? "edit-feedback" : "source-feedback"}
+        className={`source-help ${archive.error ? "is-error" : ""}`}
+        role={archive.error ? "alert" : undefined}
+      >
+        {archive.error ||
+          (archive.loading
+            ? "Gathering your films. Large lists take a little longer…"
+            : "Public lists only. No sign-in needed.")}
+      </p>
+    </form>
+  );
+
+  return (
+    <main
+      className={`archive-app ${paused || reducedMotion || hidden ? "motion-paused" : ""}`}
+      data-mode={mode}
+      style={
+        {
+          "--result-accent": archive.pull?.accent ?? "#d7ef9c",
+        } as CSSProperties
+      }
+    >
+      <a href="#main-action" className="skip-link">
+        Skip to movie selection
+      </a>
+      <div className="archive-backdrop" aria-hidden="true">
+        <div
+          className={`fallback-wall ${webglReady && !webglFailed ? "is-hidden" : ""}`}
+        >
+          {Array.from({ length: 132 }, (_, i) => (
+            <i
+              key={i}
+              style={
+                {
+                  "--tile-index": i,
+                  "--tile-delay": `${(i * 0.71) % 12}s`,
+                } as CSSProperties
+              }
+            />
+          ))}
+        </div>
+        {!webglFailed && (
+          <div className={`webgl-wall ${webglReady ? "is-ready" : ""}`}>
+            <SceneBoundary onFail={onSceneError}>
+              <ArchiveScene
+                pull={archive.pull}
+                heroBounds={heroBounds}
+                reducedMotion={reducedMotion}
+                paused={paused || hidden}
+                onReveal={archive.reveal}
+                onReady={onSceneReady}
+                onError={onSceneError}
+              />
+            </SceneBoundary>
+          </div>
+        )}
+        <div className="archive-vignette" />
+        <div className="archive-atmosphere" />
+      </div>
+      <header className="archive-header enter-chrome">
+        <Link className="brand" href="/" aria-label="Reel Roulette home">
+          <span className="brand-symbol" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+          </span>
+          <span>
+            reel<span className="brand-second">roulette</span>
+          </span>
+        </Link>
+        <div className="header-right">
+          <span className="edition-label">
+            THE LIVING ARCHIVE <span>VOL. 001</span>
+          </span>
+          {!setup && (
+            <button
+              ref={sourceButton}
+              className="collection-button"
+              onClick={() => setEditing(true)}
+              aria-label="Change movie source"
+            >
+              <span className="status-dot" />
+              <span>
+                {archive.movies.length}{" "}
+                {archive.movies.length === 1 ? "film" : "films"}
+              </span>
+              <Icon name="shelf" />
+            </button>
+          )}
+        </div>
+      </header>
+      {setup && (
+        <section
+          className="setup-panel enter-chrome"
+          aria-labelledby="setup-title"
+        >
+          <div className="eyebrow">
+            <span className="letterboxd-dots" aria-hidden="true">
+              <i />
+              <i />
+              <i />
+            </span>{" "}
+            FROM YOUR LETTERBOXD
+          </div>
+          <h1 id="setup-title">
+            Leave tonight
+            <br />
+            <em>to chance.</em>
+          </h1>
+          <p className="setup-description">
+            A shelf full of possibilities. One film for you.
+          </p>
+          <div id="main-action" className="setup-controls" tabIndex={-1}>
+            {sourceForm()}
+            <div className="demo-divider">
+              <span />
+              or
+              <span />
+            </div>
+            <button className="demo-button" onClick={archive.useDemo}>
+              Explore the demo shelf <Icon name="arrow" />
+            </button>
+          </div>
+        </section>
+      )}
+      {!setup && !winner && !archive.pulling && (
+        <section className="ready-prompt" aria-labelledby="ready-title">
+          <span className="eyebrow">
+            {archive.sourceKind === "demo"
+              ? "THE DEMO SHELF"
+              : "YOUR SHELF IS READY"}
+          </span>
+          <h1 id="ready-title">
+            {archive.movies.length ? (
+              <>
+                Let a film <em>find you.</em>
+              </>
+            ) : (
+              <>
+                A little more <em>possibility?</em>
+              </>
+            )}
+          </h1>
+          <p>
+            {archive.movies.length
+              ? archive.movies.length === 1
+                ? "One film. A little destiny."
+                : `${archive.movies.length} films. All equally possible.`
+              : "This list is empty. Try another public watchlist or list."}
+          </p>
+          {!archive.movies.length && (
+            <button className="quiet-button" onClick={() => setEditing(true)}>
+              Choose another list <Icon name="arrow" />
+            </button>
+          )}
+        </section>
+      )}
+      <section
+        className="result-layout"
+        aria-label="Selected movie"
+        aria-busy={archive.pulling}
+      >
+        <div ref={anchor} className="hero-anchor">
+          {(webglFailed || !webglReady) && archive.pull && (
+            <FlatCassette key={archive.pull.serial} pull={archive.pull} />
+          )}
+        </div>
+        <div className="result-copy-slot">
+          {winner && (
+            <article
+              className={`result-copy${archive.pulling ? " is-dismissing" : ""}`}
+              key={winner.id}
+              aria-hidden={archive.pulling}
+              inert={archive.pulling}
+            >
+              <div className="result-eyebrow">
+                <span>
+                  <i /> TONIGHT’S PICK
+                </span>
+                <span>№ {String(archive.drawCount).padStart(3, "0")}</span>
+              </div>
+              <h1 id="result-title">{winner.title}</h1>
+              {(winner.year ||
+                winner.runtimeMinutes ||
+                winner.contentRating) && (
+                <div className="movie-facts">
+                  {winner.year && <span>{winner.year}</span>}
+                  {winner.runtimeMinutes && (
+                    <span>{winner.runtimeMinutes} min</span>
+                  )}
+                  {winner.contentRating && <span>{winner.contentRating}</span>}
+                </div>
+              )}
+              {winner.genres.length > 0 && (
+                <p className="movie-genres">{winner.genres.join(" / ")}</p>
+              )}
+              {winner.summary && (
+                <p className="movie-summary">{winner.summary}</p>
+              )}
+              {(winner.rating != null || winner.audienceRating != null) && (
+                <dl className="movie-ratings">
+                  {winner.rating != null && (
+                    <div>
+                      <dt>Rating</dt>
+                      <dd>{winner.rating}</dd>
+                    </div>
+                  )}
+                  {winner.audienceRating != null && (
+                    <div>
+                      <dt>Audience</dt>
+                      <dd>{winner.audienceRating}</dd>
+                    </div>
+                  )}
+                </dl>
+              )}
+              <div className="result-rule" />
+              <p className="result-source">
+                {archive.sourceKind === "demo"
+                  ? "From the demo shelf"
+                  : `From ${archive.sourceLabel}`}
+              </p>
+              {winner.externalUrl && (
+                <a
+                  href={winner.externalUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="letterboxd-link"
+                >
+                  Open in Letterboxd <Icon name="external" />
+                </a>
+              )}
+            </article>
+          )}
+        </div>
+      </section>
+      {!setup && (
+        <div className="pull-dock" id="main-action" tabIndex={-1}>
+          <div className="pull-status" aria-hidden="true">
+            {archive.pulling ? (
+              <>
+                <span className="searching-dots">
+                  <i />
+                  <i />
+                  <i />
+                </span>{" "}
+                A LITTLE CHANCE AT WORK
+              </>
+            ) : winner ? (
+              "ONE GOOD POSSIBILITY"
+            ) : (
+              "SOMETHING GOOD IS IN HERE"
+            )}
+          </div>
+          <button
+            ref={pullButton}
+            className="pull-button"
+            onClick={archive.pullMovie}
+            disabled={
+              !archive.movies.length || archive.loading || archive.pulling
+            }
+          >
+            <span className="pull-button-icon">
+              <Icon name={archive.pulling ? "shelf" : "arrow"} />
+            </span>
+            <span>
+              {archive.pulling
+                ? "Finding your film"
+                : winner
+                  ? "Pull another"
+                  : "Pull a movie"}
+            </span>
+            <span className="pull-button-end" aria-hidden="true">
+              ↗
+            </span>
+          </button>
+          <p className="pull-footnote">
+            {archive.sourceKind === "demo" ? "Demo shelf" : archive.sourceLabel}
+            <span>·</span>
+            {archive.remaining} unseen
+          </p>
+        </div>
+      )}
+      <footer className="archive-footer enter-chrome">
+        <span className="footer-caption">
+          <span className="tiny-star">✳</span> A LITTLE LESS BROWSING. A LITTLE
+          MORE CINEMA.
+        </span>
+        <div className="footer-tools">
+          <Link href="/privacy">Privacy</Link>
+          <button
+            className="motion-button"
+            aria-label={
+              paused ? "Resume ambient animation" : "Pause ambient animation"
+            }
+            aria-pressed={paused}
+            onClick={() => setPaused((value) => !value)}
+            disabled={reducedMotion}
+            title={
+              reducedMotion
+                ? "Reduced motion is enabled on your device"
+                : paused
+                  ? "Resume ambient animation"
+                  : "Pause ambient animation"
+            }
+          >
+            <Icon name={paused || reducedMotion ? "play" : "pause"} />
+          </button>
+        </div>
+      </footer>
+      <p
+        className="sr-only"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        {archive.pulling
+          ? "Finding your next film."
+          : winner
+            ? `Your next film is ${winner.title}${winner.year ? `, ${winner.year}` : ""}.`
+            : archive.notice}
+      </p>
+      <dialog
+        className="source-dialog"
+        ref={sourceDialog}
+        aria-labelledby="source-dialog-title"
+        onKeyDown={trapSourceFocus}
+        onCancel={closeEditor}
+        onClick={(event) => {
+          if (event.target === event.currentTarget) closeEditor();
+        }}
+      >
+        <div className="source-dialog-inner">
+          <button
+            className="dialog-close"
+            onClick={closeEditor}
+            aria-label="Close source settings"
+          >
+            <Icon name="close" />
+          </button>
+          <span className="eyebrow">MAKE ROOM FOR SOMETHING NEW</span>
+          <h2 id="source-dialog-title">Change the shelf.</h2>
+          <p className="dialog-intro">Load another watchlist or public list.</p>
+          {sourceForm(true)}
+          <button className="reset-button" onClick={resetShelf}>
+            <Icon name="reset" /> Reset this session
+          </button>
+        </div>
+      </dialog>
+      <div className="opening-veil" aria-hidden="true" />
+    </main>
+  );
 }

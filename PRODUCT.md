@@ -1,62 +1,28 @@
 # Product
 
-<!-- impeccable:product-schema 1 -->
+## Platform and stack
 
-## Platform
+Responsive web. Next.js App Router, React, TypeScript, Three.js / React Three Fiber, GSAP, and GLSL. Vitest covers domain and controller behavior; Playwright covers desktop and mobile flows. WebGL is the supported rendering baseline. This screen does not require scroll-driven animation or a scrolling library.
 
-web
+## Purpose
 
-## Stack
+Choose tonight’s movie from a public Letterboxd watchlist or curated list through a satisfying physical reveal. One film appears at a time. The wall is abstract and has a repeatable visual tile count independent of the movie pool size.
 
-Delegated: Next.js App Router with TypeScript, React, Tailwind CSS, Vitest, and Vercel. Chosen for server-side Plex token handling, simple open-source self-hosting, and direct Vercel deployment.
+## Current experience
 
-## Users
+- Import a public Letterboxd username’s watchlist or a public list URL.
+- Optional, explicitly labeled eight-film demo collection.
+- One Pull a movie control; subsequent pulls dismiss the previous result.
+- Uniform selection without replacement; silently restart after exhaustion, with no immediate cycle-boundary repeat for pools larger than one.
+- Display available movie metadata and a canonical Open in Letterboxd action.
+- Change source or reset the session from the source control.
+- No filters, result history, database, or persistent tracking.
+- Mobile means mobile web, with the cassette above its details.
 
-People who operate or share access to a Plex Media Server and want to choose a movie without prolonged browsing, either alone or with others in a living room.
+## Data and future integration
 
-## Product Purpose
+Existing bounded, validated Letterboxd fetching is reused. No enrichment or fabricated metadata is added. Plex integration is deferred: the existing server adapters and contract tests remain in the repository, but the redesigned UI does not call Plex. Diary and combined import endpoints are also retained without exposing them in the new UI.
 
-Load a real movie pool from Plex or a public Letterboxd watchlist, curated list, or diary, narrow the eligible pool, and make a fair random selection through a satisfying wheel interaction. Success means a user can load a source, spin, inspect the result, and open it in the originating service within one short session.
+## Interaction and accessibility
 
-## Positioning
-
-The product separates fair selection from visual animation: every eligible movie has an equal chance even when the wheel can only render a readable sample. It is an open-source, privacy-conscious companion rather than a recommendation engine.
-
-## Operating Context
-
-Users arrive through a public Vercel deployment or a self-hosted instance. They authorize Plex, select a server and movie library, apply a small set of filters, spin, inspect movie details, and optionally open the winner in Plex.
-
-## Capabilities and Constraints
-
-- Plex PIN authentication and Plex server/library discovery.
-- Public Letterboxd watchlist, curated-list URL, diary, and combined imports without Letterboxd credentials.
-- Movies only in version one.
-- Filters: library, watched state, genre, and maximum runtime.
-- Wheel animation is the initial selection visualization; future animation modes may be interchangeable.
-- Movie details include available artwork, title, year, summary, runtime, content rating, genres, watched state, ratings, and Open in Plex.
-- Winner actions: Open in Plex, Spin Again, and Exclude & Spin Again.
-- Exclusions and repeat prevention affect only the current session and never modify Plex.
-- Public Vercel app plus self-hosting.
-- No application database; Plex credentials and library data are short-lived.
-- Hosted access depends on the Plex server exposing a reachable secure/relay connection.
-- TV, voting, persistent history, AI recommendations, weighted selection, and advanced filters are out of scope for version one.
-
-## Brand Commitments
-
-The interface must be minimalist and as elegant as possible. It should remain product-led and restrained rather than decorative. The working product name is "Reel Roulette" and may change before public launch.
-
-## Evidence on Hand
-
-No testimonials, usage metrics, customer claims, brand assets, or production screenshots exist yet. Do not fabricate them. Real Plex metadata and posters become the product content after authorization.
-
-## Product Principles
-
-- Fairness is testable and independent of animation.
-- The movie artwork is the visual content; interface chrome stays quiet.
-- A user should reach a decision with very few controls and no account beyond Plex.
-- Privacy defaults to no database and short-lived sessions.
-- Empty, unreachable-server, and authorization states must be honest and recoverable.
-
-## Accessibility & Inclusion
-
-Keyboard operation, visible focus, readable contrast, semantic controls, and a reduced-motion result path are required. The wheel must not be the only way the winner is communicated.
+The Living Archive is glossy and rounded, with a black-to-surfacing introduction, restrained idle movement, and a continuous tile-to-cassette transformation. Semantic controls and HTML details carry the functionality independently of the canvas. Keyboard focus, reduced motion, pause, context-loss recovery, and a non-WebGL fallback are required. Stale imports and canceled animations cannot reveal an old result or consume an unseen film.
