@@ -6,7 +6,7 @@ Reel Roulette is an independent open-source project and is not affiliated with o
 
 ## Letterboxd public datasets
 
-Enter a public username under Watchlist, or choose List URL and paste a public curated list. The existing server fetcher validates public Letterboxd paths and enforces bounded time, size, page, and film limits. No credentials or cookies are requested. Film data stays in memory. Current imports provide title, optional year, and a canonical Letterboxd URL; the cassette uses a designed typographic label without requiring poster artwork.
+Enter a public username under Watchlist, or choose List URL and paste a public curated list. The existing server fetcher validates public Letterboxd paths and enforces bounded time, size, page, and film limits. No Letterboxd credentials or cookies are requested. Your collection stays in memory. Set `TMDB_API_READ_TOKEN` on the server to enrich films with posters, directors, runtime, genres, and synopsis. Unique normalized title/year matches are required; ambiguous matches keep the original details. Public TMDB responses are cached for one day. The portrait reveal remains usable when enrichment or artwork fails.
 
 ## Local setup
 

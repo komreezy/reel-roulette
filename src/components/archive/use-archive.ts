@@ -11,6 +11,7 @@ import {
   type ArchiveCycle,
 } from "@/lib/archive-selection";
 import type { Movie } from "@/lib/models";
+import { prepareMovie } from "@/lib/prepare-movie";
 
 type ImportKind = "watchlist" | "list";
 type ArchiveState = {
@@ -327,7 +328,19 @@ export function useArchive() {
     clearWatchdog();
     // The scene normally finishes this transaction. Context loss must not lock it.
     timerRef.current = setTimeout(() => reveal(pull.serial), 3_500);
+    void prepareMovie(pull.movie).then(details => {
+      if (!mountedRef.current || stateRef.current.pull?.serial !== pull.serial) return;
+      const movie = { ...pull.movie, ...details };
+      const enriched = { ...pull, movie };
+      if (pendingRef.current?.pull.serial === pull.serial) pendingRef.current.pull = enriched;
+      update({ pull: enriched, ...(stateRef.current.winner?.id === movie.id ? { winner: movie } : {}) });
+    });
   }, [clearWatchdog, reveal, update]);
+
+  useEffect(() => {
+    // A small warm-up only; large watchlists never trigger thousands of lookups.
+    for (const movie of state.movies.slice(0, 3)) void prepareMovie(movie);
+  }, [state.movies]);
 
   return {
     ...state,

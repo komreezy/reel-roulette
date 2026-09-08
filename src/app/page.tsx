@@ -81,13 +81,18 @@ class SceneBoundary extends Component<
   }
 }
 function FlatCassette({ pull }: { pull: ArchivePull }) {
+  const [failed, setFailed] = useState(false);
   return (
     <div
       className="flat-cassette"
       style={{ "--accent": pull.accent } as CSSProperties}
       aria-hidden="true"
     >
-      <div className="cassette-rim">
+      {pull.movie.posterUrl && !failed ? (
+        // A native image also works when WebGL is unavailable.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img className="flat-poster" src={pull.movie.posterUrl} alt="" onError={() => setFailed(true)} />
+      ) : <div className="cassette-rim">
         <div className="cassette-label">
           <div className="cassette-label-top">
             <span>REEL ROULETTE</span>
@@ -99,7 +104,7 @@ function FlatCassette({ pull }: { pull: ArchivePull }) {
             <span>AN EVENING LEFT TO CHANCE ↗</span>
           </div>
         </div>
-      </div>
+      </div>}
       <span className="cassette-edge">RR / THE LIVING ARCHIVE</span>
     </div>
   );
@@ -504,6 +509,7 @@ export default function Home() {
                 <span>№ {String(archive.drawCount).padStart(3, "0")}</span>
               </div>
               <h1 id="result-title">{winner.title}</h1>
+              {!!winner.directors?.length && <p className="movie-director">A film by {winner.directors.join(" & ")}</p>}
               {(winner.year ||
                 winner.runtimeMinutes ||
                 winner.contentRating) && (
@@ -538,6 +544,7 @@ export default function Home() {
                 </dl>
               )}
               <div className="result-rule" />
+              {winner.tmdbId && <a className="movie-credit" href="https://www.themoviedb.org" target="_blank" rel="noreferrer">Artwork & details · TMDB</a>}
               <p className="result-source">
                 {archive.sourceKind === "demo"
                   ? "From the demo shelf"

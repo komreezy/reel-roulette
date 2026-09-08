@@ -576,9 +576,10 @@ svg {
 }
 .hero-anchor {
   width: 100%;
-  aspect-ratio: 1.8;
+  aspect-ratio: 2 / 3;
   min-width: 0;
-  max-width: 600px;
+  max-width: min(360px, 42svh);
+  justify-self: center;
   position: relative;
 }
 .result-copy-slot {
@@ -991,6 +992,16 @@ svg {
     inset 0 2px 3px #46375555,
     0 1px 1px #fff7;
 }
+.flat-poster {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 17px;
+  background: #17121d;
+}
+.movie-director { color: #d4c8df; font-size: 15px; margin: -4px 0 20px; }
+.movie-credit { display: inline-block; color: #b2a7c3; font-size: 11px; margin-bottom: 12px; }
 .cassette-label {
   height: 100%;
   padding: 15px 18px;
@@ -1273,9 +1284,9 @@ svg {
     background: linear-gradient(
       180deg,
       transparent 0%,
-      transparent 40%,
-      #0d0a1bd9 53%,
-      #0d0a1bf0 77%,
+      transparent 72%,
+      #0d0a1bd9 88%,
+      #0d0a1bf0 96%,
       #0d0a1baa
     );
   }
@@ -1296,11 +1307,11 @@ svg {
     align-items: center;
     gap: 36px;
     min-height: 100svh;
-    padding: 150px 32px 210px;
+    padding: 120px 32px 210px;
   }
   .hero-anchor {
     width: 100%;
-    max-width: 410px;
+    max-width: min(220px, 30svh);
     flex-shrink: 0;
   }
   .result-copy-slot {

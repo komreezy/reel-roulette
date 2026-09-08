@@ -194,7 +194,23 @@ function labelTexture(pull: ArchivePull, serifReady: boolean) {
     const barWidth = i % 3 === 0 ? 4 : 2;
     ctx.fillRect(1330 + i * 4.2, 653, barWidth, 42);
   }
-  const texture = new THREE.CanvasTexture(canvas);
+  const portrait = document.createElement("canvas");
+  portrait.width = 1000;
+  portrait.height = 1500;
+  const portraitContext = portrait.getContext("2d")!;
+  portraitContext.fillStyle = "#f3eee5";
+  portraitContext.fillRect(0, 0, 1000, 1500);
+  portraitContext.strokeStyle = pull.accent;
+  portraitContext.lineWidth = 32;
+  portraitContext.beginPath();
+  portraitContext.arc(500, 290, 180, 0, TWO_PI);
+  portraitContext.stroke();
+  portraitContext.drawImage(canvas, 0, 600, 1000, 484);
+  portraitContext.fillStyle = "#827587";
+  portraitContext.font = "20px monospace";
+  portraitContext.textAlign = "center";
+  portraitContext.fillText("THE LIVING ARCHIVE", 500, 1370);
+  const texture = new THREE.CanvasTexture(portrait);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = 4;
   return texture;
@@ -330,15 +346,31 @@ function SceneContent(props: ArchiveSceneProps) {
     [layout],
   );
   const heroGeometry = useMemo(
-    () => new RoundedBoxGeometry(1.8, 1, 0.25, 5, 0.12),
+    () => new RoundedBoxGeometry(1, 1.5, 0.14, 5, 0.065),
     [],
   );
-  const panelGeometry = useMemo(() => roundedPlane(1.57, 0.76, 0.07), []);
-  const rimGeometry = useMemo(() => roundedPlane(1.598, 0.788, 0.082), []);
+  const panelGeometry = useMemo(() => roundedPlane(0.94, 1.41, 0.045), []);
+  const rimGeometry = useMemo(() => roundedPlane(0.962, 1.432, 0.052), []);
   const texture = useMemo(
     () => (displayed ? labelTexture(displayed, serifReady) : null),
     [displayed, serifReady],
   );
+  const [posterTexture, setPosterTexture] = useState<{ url: string; texture: THREE.Texture } | null>(null);
+  const posterUrl = pull?.serial === displayed?.serial ? pull?.movie.posterUrl : displayed?.movie.posterUrl;
+  useEffect(() => {
+    let active = true;
+    let loaded: THREE.Texture | undefined;
+    if (posterUrl) new THREE.TextureLoader().load(posterUrl, next => {
+      if (!active) { next.dispose(); return; }
+      loaded = next;
+      next.colorSpace = THREE.SRGBColorSpace;
+      next.anisotropy = 4;
+      setPosterTexture({ url: posterUrl, texture: next });
+      invalidate();
+    }, undefined, () => { /* The printed fallback remains usable. */ });
+    return () => { active = false; loaded?.dispose(); };
+  }, [posterUrl, invalidate]);
+  const faceTexture = posterTexture && posterTexture.url === posterUrl ? posterTexture.texture : texture;
   const uniforms = useRef({
     uArchiveTime: { value: 0 },
     uArchiveIntro: { value: 0 },
@@ -469,11 +501,11 @@ function SceneContent(props: ArchiveSceneProps) {
     // A canvas map is attached after the first material render. Three requires
     // an explicit program refresh when USE_MAP changes; re-uploading also
     // restores the canvas texture after a renderer resize or hot refresh.
-    material.map = texture;
+    material.map = faceTexture;
     if (material.map) material.map.needsUpdate = true;
     material.needsUpdate = true;
     invalidate();
-  }, [texture, size.width, size.height, invalidate]);
+  }, [faceTexture, size.width, size.height, invalidate]);
   useEffect(
     () => () => {
       geometry.dispose();
@@ -529,14 +561,15 @@ function SceneContent(props: ArchiveSceneProps) {
       m.nextSlot = nearest;
       m.origin.x = layout.slots[nearest].x;
       m.origin.y = layout.slots[nearest].y;
-      m.origin.sx = layout.tileHeight / 1.8;
-      m.origin.sy = layout.tileWidth;
-      m.origin.sz = layout.depth / 0.25;
+      m.origin.sx = layout.tileWidth;
+      m.origin.sy = layout.tileHeight / 1.5;
+      m.origin.sz = layout.depth / 0.14;
     }
   }, [layout, size.width, size.height]);
 
   useEffect(() => {
     timeline.current?.kill();
+    const pull = pullRef.current;
     const m = motion.current;
     if (!pull) {
       m.visible = false;
@@ -581,26 +614,26 @@ function SceneContent(props: ArchiveSceneProps) {
       z: currentLayout.depth * 0.04,
       rx: 0,
       ry: 0,
-      rz: Math.PI / 2,
-      sx: currentLayout.tileHeight / 1.8,
-      sy: currentLayout.tileWidth,
-      sz: currentLayout.depth / 0.25,
+      rz: 0,
+      sx: currentLayout.tileWidth,
+      sy: currentLayout.tileHeight / 1.5,
+      sz: currentLayout.depth / 0.14,
     };
     const getTarget = (): Pose => {
       const bounds = boundsRef.current;
       const viewport = sizeRef.current;
       const width = bounds?.width ?? Math.min(440, viewport.width * 0.76);
-      const height = bounds?.height ?? width / 1.8;
+      const height = bounds?.height ?? width * 1.5;
       return {
         x: bounds ? bounds.x + bounds.width / 2 - viewport.width / 2 : 0,
         y: bounds ? viewport.height / 2 - bounds.y - bounds.height / 2 : 0,
         z: 135,
         rx: -0.035,
-        ry: -0.075,
-        rz: -0.02,
-        sx: width / 1.8,
-        sy: height,
-        sz: width / 1.8,
+        ry: -0.16,
+        rz: -0.055,
+        sx: width,
+        sy: height / 1.5,
+        sz: width,
       };
     };
     const hadHero = m.visible;
@@ -688,8 +721,8 @@ function SceneContent(props: ArchiveSceneProps) {
       {
         z: 135,
         rx: -0.035,
-        ry: -0.075,
-        rz: -0.02,
+        ry: -0.16,
+        rz: -0.055,
         duration: 0.42,
         ease: "power2.out",
       },
@@ -717,7 +750,7 @@ function SceneContent(props: ArchiveSceneProps) {
     return () => {
       sequence.kill();
     };
-  }, [pull, reducedMotion, invalidate]);
+  }, [pull?.serial, reducedMotion, invalidate]);
 
   useFrame((_, delta) => {
     if (!tiles.current) return;
@@ -796,9 +829,9 @@ function SceneContent(props: ArchiveSceneProps) {
           size.height / 2 - bounds.y - bounds.height / 2,
           follow,
         );
-        m.pose.sx = THREE.MathUtils.lerp(m.pose.sx, bounds.width / 1.8, follow);
-        m.pose.sy = THREE.MathUtils.lerp(m.pose.sy, bounds.height, follow);
-        m.pose.sz = THREE.MathUtils.lerp(m.pose.sz, bounds.width / 1.8, follow);
+        m.pose.sx = THREE.MathUtils.lerp(m.pose.sx, bounds.width, follow);
+        m.pose.sy = THREE.MathUtils.lerp(m.pose.sy, bounds.height / 1.5, follow);
+        m.pose.sz = THREE.MathUtils.lerp(m.pose.sz, bounds.width, follow);
       }
       const drift = m.settled && !reducedMotion ? Math.sin(time * 0.7) : 0;
       hero.current.position.set(m.pose.x, m.pose.y + drift * 1.6, m.pose.z);
@@ -874,7 +907,7 @@ function SceneContent(props: ArchiveSceneProps) {
             iridescenceThicknessRange={[120, 300]}
           />
         </mesh>
-        <mesh geometry={rimGeometry} position={[0, 0.008, 0.126]}>
+        <mesh geometry={rimGeometry} position={[0, 0, 0.071]}>
           <meshPhysicalMaterial
             ref={labelRimMaterial}
             color="#52415f"
@@ -884,11 +917,11 @@ function SceneContent(props: ArchiveSceneProps) {
             depthWrite={false}
           />
         </mesh>
-        <mesh geometry={panelGeometry} position={[0, 0.008, 0.13]}>
+        <mesh geometry={panelGeometry} position={[0, 0, 0.075]}>
           <meshBasicMaterial
-            key={texture?.uuid ?? "unprinted-label"}
+            key={faceTexture?.uuid ?? "unprinted-label"}
             ref={labelMaterial}
-            map={texture}
+            map={faceTexture}
             color="#ffffff"
             toneMapped={false}
             transparent

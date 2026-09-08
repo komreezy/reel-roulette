@@ -21,7 +21,7 @@ Choose tonight’s movie from a public Letterboxd watchlist or curated list thro
 
 ## Data and future integration
 
-Existing bounded, validated Letterboxd fetching is reused. No enrichment or fabricated metadata is added. Plex integration is deferred: the existing server adapters and contract tests remain in the repository, but the redesigned UI does not call Plex. Diary and combined import endpoints are also retained without exposing them in the new UI.
+Existing bounded, validated Letterboxd fetching is reused. TMDB adds posters and curated details through a server-only credential and conservative title/year matching. Missing or ambiguous data is omitted. Plex integration is deferred: the existing server adapters and contract tests remain in the repository, but the redesigned UI does not call Plex. Diary and combined import endpoints are also retained without exposing them in the new UI.
 
 ## Interaction and accessibility
 
