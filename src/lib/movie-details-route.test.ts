@@ -23,3 +23,21 @@ it("fails gracefully on upstream errors", async () => {
   expect(response.status).toBe(502);
   expect(await response.json()).toEqual({ details: null });
 });
+it("resolves ambiguous movies using the canonical Letterboxd identifier", async () => {
+  vi.stubEnv("TMDB_API_READ_TOKEN", "test");
+  const fetcher = vi.fn()
+    .mockResolvedValueOnce(Response.json({ results: [] }))
+    .mockResolvedValueOnce(new Response('<body data-tmdb-id="329865">'))
+    .mockResolvedValueOnce(Response.json({ runtime: 116 }));
+  vi.stubGlobal("fetch", fetcher);
+  const response = await GET(new Request("https://example.com/api/movies/details?title=Arrival&year=2016&film=https%3A%2F%2Fletterboxd.com%2Ffilm%2Farrival-2016%2F"));
+  expect((await response.json()).details.tmdbId).toBe(329865);
+  expect(fetcher.mock.calls[1][0]).toBe("https://letterboxd.com/film/arrival-2016/");
+});
+it("does not fetch arbitrary film URLs", async () => {
+  vi.stubEnv("TMDB_API_READ_TOKEN", "test");
+  const fetcher = vi.fn().mockResolvedValueOnce(Response.json({ results: [] }));
+  vi.stubGlobal("fetch", fetcher);
+  await GET(new Request("https://example.com/api/movies/details?title=Arrival&film=http://127.0.0.1/private"));
+  expect(fetcher).toHaveBeenCalledTimes(1);
+});

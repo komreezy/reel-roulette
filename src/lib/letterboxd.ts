@@ -145,6 +145,14 @@ async function getUserCollection(usernameInput: string, dataset: "watchlist" | "
 }
 
 export async function getWatchlist(usernameInput: string) { return getUserCollection(usernameInput, "watchlist"); }
+export async function getFilmTmdbId(filmUrl: string): Promise<number | undefined> {
+  if (!/^https:\/\/letterboxd\.com\/film\/[A-Za-z0-9_-]+\/$/.test(filmUrl)) return undefined;
+  try {
+    const html = await fetchPage(filmUrl, 2500);
+    const match = html.match(/data-tmdb-id=["'](\d+)["']/) ?? html.match(/themoviedb\.org\/movie\/(\d+)/);
+    return match ? Number(match[1]) : undefined;
+  } catch { return undefined; }
+}
 export async function getDiary(usernameInput: string) { return getUserCollection(usernameInput, "diary"); }
 export async function getList(listUrlInput: string) {
   const listUrl = new URL(validatePublicListUrl(listUrlInput));

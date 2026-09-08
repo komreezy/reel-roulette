@@ -1,4 +1,5 @@
 import { matchMovie, type MovieCandidate, type MovieDetails } from "@/lib/movie-details";
+import { getFilmTmdbId } from "@/lib/letterboxd";
 
 export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
@@ -24,10 +25,11 @@ export async function GET(request: Request) {
     if (year) query.set("year", String(year));
     const search = await tmdb(`search/movie?${query}`);
     const movie = matchMovie(title, year, (search.results ?? []) as MovieCandidate[]);
-    if (!movie) return Response.json({ details: null }, { headers: { "Cache-Control": "public, max-age=3600" } });
-    const data = await tmdb(`movie/${movie.id}?append_to_response=credits&language=en-US`);
+    const movieId = movie?.id ?? await getFilmTmdbId(params.get("film") ?? "");
+    if (!movieId) return Response.json({ details: null }, { headers: { "Cache-Control": "public, max-age=3600" } });
+    const data = await tmdb(`movie/${movieId}?append_to_response=credits&language=en-US`);
     const details: MovieDetails = {
-      tmdbId: movie.id,
+      tmdbId: movieId,
       ...(typeof data.poster_path === "string" && /^\/[A-Za-z0-9]+\.(jpg|png)$/.test(data.poster_path) ? { posterUrl: `https://image.tmdb.org/t/p/w500${data.poster_path}` } : {}),
       ...(data.overview ? { summary: data.overview } : {}),
       ...(data.runtime > 0 ? { runtimeMinutes: data.runtime } : {}),
