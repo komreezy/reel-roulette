@@ -1317,6 +1317,17 @@ svg {
   .result-copy-slot {
     width: 100%;
     max-width: 410px;
+    position: relative;
+    isolation: isolate;
+  }
+  .result-copy-slot:has(.result-copy)::before {
+    content: "";
+    position: absolute;
+    inset: -20px -16px;
+    z-index: -1;
+    border-radius: 24px;
+    background: #100c1fed;
+    box-shadow: 0 16px 45px #08061166;
   }
   .result-eyebrow {
     font-size: 9px;
